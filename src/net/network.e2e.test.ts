@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * End to end over real TCP sockets on this machine: a Host and three phones
  * play a full match, using the same wiring code the app uses on Android.
