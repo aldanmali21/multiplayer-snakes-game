@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, Switch, View } from 'react-native';
-import { MAX_APPLES, MIN_APPLES, type MatchSettings } from '../game/rules';
+import { MAX_APPLES, MAX_TARGET, MIN_APPLES, MIN_TARGET, TARGET_STEP, type MatchSettings } from '../game/rules';
 import type { Theme } from '../theme/theme';
 import { Card, Text } from './ui';
 
@@ -47,21 +47,23 @@ function StepButton({ theme, label, onPress, disabled }: { theme: Theme; label: 
   );
 }
 
-function ApplesRow({ theme, value, onChange }: { theme: Theme; value: number; onChange?: (v: number) => void }) {
+function StepperRow({
+  theme, label, hint, value, min, max, step = 1, badge, onChange,
+}: { theme: Theme; label: string; hint: string; value: number; min: number; max: number; step?: number; badge: string; onChange?: (v: number) => void }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Apples on the lawn</Text>
-        <Text style={{ color: theme.textDim, fontSize: 13 }}>How many apples are out at once</Text>
+        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>{label}</Text>
+        <Text style={{ color: theme.textDim, fontSize: 13 }}>{hint}</Text>
       </View>
       {onChange ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <StepButton theme={theme} label="−" disabled={value <= MIN_APPLES} onPress={() => onChange(Math.max(MIN_APPLES, value - 1))} />
-          <Text style={{ color: theme.text, fontSize: 18, fontWeight: '600', minWidth: 28, textAlign: 'center' }}>{value}</Text>
-          <StepButton theme={theme} label="+" disabled={value >= MAX_APPLES} onPress={() => onChange(Math.min(MAX_APPLES, value + 1))} />
+          <StepButton theme={theme} label="−" disabled={value <= min} onPress={() => onChange(Math.max(min, value - step))} />
+          <Text style={{ color: theme.text, fontSize: 18, fontWeight: '600', minWidth: 34, textAlign: 'center' }}>{value}</Text>
+          <StepButton theme={theme} label="+" disabled={value >= max} onPress={() => onChange(Math.min(max, value + step))} />
         </View>
       ) : (
-        <Text style={{ color: theme.accent, fontWeight: '600' }}>🍎 {value}</Text>
+        <Text style={{ color: theme.accent, fontWeight: '600' }}>{badge} {value}</Text>
       )}
     </View>
   );
@@ -72,7 +74,27 @@ export function SettingsCard({ theme, settings, onChange, solo, title = 'RULES' 
   return (
     <Card theme={theme} style={{ alignSelf: 'stretch' }}>
       <Text style={{ color: theme.textDim, fontSize: 13, fontWeight: '600', letterSpacing: 1 }}>{title}</Text>
-      <ApplesRow theme={theme} value={settings.apples} onChange={onChange && ((apples) => onChange({ ...settings, apples }))} />
+      <StepperRow
+        theme={theme}
+        label="Score to win"
+        hint="First snake to eat this many apples wins"
+        value={settings.targetScore}
+        min={MIN_TARGET}
+        max={MAX_TARGET}
+        step={TARGET_STEP}
+        badge="🏆"
+        onChange={onChange && ((targetScore) => onChange({ ...settings, targetScore }))}
+      />
+      <StepperRow
+        theme={theme}
+        label="Apples on the lawn"
+        hint="How many apples are out at once"
+        value={settings.apples}
+        min={MIN_APPLES}
+        max={MAX_APPLES}
+        badge="🍎"
+        onChange={onChange && ((apples) => onChange({ ...settings, apples }))}
+      />
       <Row
         theme={theme}
         label="Deadly walls"

@@ -145,6 +145,14 @@ describe('fruit and growth', () => {
 });
 
 describe('deaths', () => {
+  it('remembers the direction it was heading when it crashed', () => {
+    // Turned down on the fatal tick, straight into the bottom wall.
+    const m = scenario([{ id: 'p0', body: [{ x: 5, y: 19 }, { x: 4, y: 19 }, { x: 3, y: 19 }], queue: ['down'] }]);
+    const s = snake(step(m), 'p0');
+    expect(s.alive).toBe(false);
+    expect(s.dir).toBe('down');
+  });
+
   it('dies on hitting a wall and its body disappears', () => {
     const m = scenario([
       { id: 'p0', body: [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }] },
@@ -408,8 +416,12 @@ describe('board size and apples', () => {
   });
 
   it('cleans up settings from storage or the network', () => {
-    expect(sanitizeSettings(undefined)).toEqual({ walls: true, snakeCollisions: true, apples: 3 });
-    expect(sanitizeSettings({ apples: 50, walls: false })).toEqual({ walls: false, snakeCollisions: true, apples: 10 });
+    expect(sanitizeSettings(undefined)).toEqual({ walls: true, snakeCollisions: true, apples: 3, targetScore: 20 });
+    expect(sanitizeSettings({ apples: 50, walls: false })).toEqual({ walls: false, snakeCollisions: true, apples: 10, targetScore: 20 });
+    expect(sanitizeSettings({ targetScore: 7 }).targetScore).toBe(5);
+    expect(sanitizeSettings({ targetScore: 13 }).targetScore).toBe(15);
+    expect(sanitizeSettings({ targetScore: 1000 }).targetScore).toBe(100);
+    expect(sanitizeSettings({ targetScore: 0 }).targetScore).toBe(5);
     expect(sanitizeSettings({ apples: 0 } as never).apples).toBe(1);
     expect(sanitizeSettings({ walls: 'no' } as never).walls).toBe(true);
   });

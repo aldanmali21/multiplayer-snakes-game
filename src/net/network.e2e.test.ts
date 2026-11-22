@@ -100,15 +100,16 @@ describe('multiplayer over real sockets', () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(host.snap().players.find((p) => p.id === 'b')!.species).toBe(6);
 
-    host.core.setSettings({ walls: false, snakeCollisions: false, apples: 7 });
+    host.core.setSettings({ walls: false, snakeCollisions: false, apples: 7, targetScore: 10 });
     await until(() => bob.box.snap.room?.settings.apples === 7);
-    expect(bob.box.snap.room!.settings).toEqual({ walls: false, snakeCollisions: false, apples: 7 });
+    expect(bob.box.snap.room!.settings).toEqual({ walls: false, snakeCollisions: false, apples: 7, targetScore: 10 });
 
     host.core.start({ width: 400, height: 700 });
     await until(() => bob.box.snap.room?.phase === 'running', 6000);
     const state = bob.box.snap.view!.state;
     expect(state.config.height).toBeGreaterThan(state.config.width);
     expect(state.fruits).toHaveLength(7);
+    expect(state.config.targetScore).toBe(10);
     expect(state.snakes.find((s) => s.id === 'b')!.species).toBe(6);
 
     // Ann pauses for everyone; Bob resumes after the others see it.

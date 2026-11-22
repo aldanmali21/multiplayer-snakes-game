@@ -22,18 +22,24 @@ export type Config = {
 };
 
 /** The parts of the Config that players may change before a match. */
-export type MatchSettings = Pick<Config, 'walls' | 'snakeCollisions' | 'apples'>;
-export const DEFAULT_SETTINGS: MatchSettings = { walls: true, snakeCollisions: true, apples: 3 };
+export type MatchSettings = Pick<Config, 'walls' | 'snakeCollisions' | 'apples' | 'targetScore'>;
+export const DEFAULT_SETTINGS: MatchSettings = { walls: true, snakeCollisions: true, apples: 3, targetScore: 20 };
 export const MIN_APPLES = 1;
 export const MAX_APPLES = 10;
+/** Target Score choices: 5 to 100 in steps of 5. */
+export const MIN_TARGET = 5;
+export const MAX_TARGET = 100;
+export const TARGET_STEP = 5;
 
 /** Cleans settings that came from storage or over the network. */
 export function sanitizeSettings(s: Partial<MatchSettings> | undefined): MatchSettings {
   const apples = Math.round(Number(s?.apples ?? DEFAULT_SETTINGS.apples));
+  const target = Math.round(Number(s?.targetScore ?? DEFAULT_SETTINGS.targetScore) / TARGET_STEP) * TARGET_STEP;
   return {
     walls: typeof s?.walls === 'boolean' ? s.walls : DEFAULT_SETTINGS.walls,
     snakeCollisions: typeof s?.snakeCollisions === 'boolean' ? s.snakeCollisions : DEFAULT_SETTINGS.snakeCollisions,
     apples: Number.isFinite(apples) ? Math.min(MAX_APPLES, Math.max(MIN_APPLES, apples)) : DEFAULT_SETTINGS.apples,
+    targetScore: Number.isFinite(target) ? Math.min(MAX_TARGET, Math.max(MIN_TARGET, target)) : DEFAULT_SETTINGS.targetScore,
   };
 }
 
@@ -239,7 +245,8 @@ export function step(state: MatchState): MatchState {
       h.y >= height ||
       hitsBody ||
       (snakeCollisions && (headCounts.get(key(h)) ?? 0) > 1);
-    if (dead) return kill(state.snakes.find((s) => s.id === m.snake.id)!);
+    // Keep the direction it was heading when it hit, so the crash can be shown going the right way.
+    if (dead) return kill({ ...state.snakes.find((s) => s.id === m.snake.id)!, dir: m.snake.dir });
     if (m.grows) eaten.add(key(h));
     return { ...m.snake, body: m.body, score: m.snake.score + (m.grows ? 1 : 0) };
   });

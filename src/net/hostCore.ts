@@ -2,6 +2,7 @@ import {
   DEFAULT_SETTINGS,
   SPECIES_COUNT,
   boardSizeFor,
+  sanitizeSettings,
   createMatch,
   eliminate,
   step,
@@ -162,7 +163,7 @@ export class HostCore {
   /** Only the Host changes the rules, and only between matches. */
   setSettings(settings: Partial<MatchSettings>) {
     if (this.phase !== 'lobby' && this.phase !== 'over') return;
-    this.settings = { ...this.settings, ...settings };
+    this.settings = sanitizeSettings({ ...this.settings, ...settings });
     this.broadcastRoom();
     this.publish();
   }

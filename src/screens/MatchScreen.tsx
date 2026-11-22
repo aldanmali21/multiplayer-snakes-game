@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, Pressable, View, useWindowDimensions } from 'react-native';
+import { Animated, PanResponder, Pressable, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
@@ -77,12 +77,31 @@ export function MatchScreen({ theme, view, myId, onTurn, onLeave, banner, roomCo
 
   // Haptic feedback when I eat or die.
   const me = view?.state.snakes.find((s) => s.id === myId);
+  const knockX = useRef(new Animated.Value(0)).current;
+  const knockY = useRef(new Animated.Value(0)).current;
   const prevScore = useRef(0);
   const prevAlive = useRef(true);
   useEffect(() => {
     if (!me) return;
     if (me.score > prevScore.current) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    if (prevAlive.current && !me.alive) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    if (prevAlive.current && !me.alive) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+      setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {}), 120);
+      // knock: the whole board jolts in the direction of travel, then settles
+      // On a turned board, the board's "up" points right on screen.
+      const turned: Record<Dir, Dir> = { up: 'right', right: 'down', down: 'left', left: 'up' };
+      const d = rotatedRef.current ? turned[me.dir] : me.dir;
+      const v = d === 'left' || d === 'up' ? -1 : 1;
+      const axis = d === 'left' || d === 'right' ? 'x' : 'y';
+      const target = axis === 'x' ? knockX : knockY;
+      Animated.sequence([
+        Animated.timing(target, { toValue: v * 10, duration: 50, useNativeDriver: true }),
+        Animated.timing(target, { toValue: -v * 7, duration: 70, useNativeDriver: true }),
+        Animated.timing(target, { toValue: v * 4, duration: 70, useNativeDriver: true }),
+        Animated.timing(target, { toValue: -v * 2, duration: 70, useNativeDriver: true }),
+        Animated.timing(target, { toValue: 0, duration: 80, useNativeDriver: true }),
+      ]).start();
+    }
     prevScore.current = me.score;
     prevAlive.current = me.alive;
   }, [me?.score, me?.alive]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -119,7 +138,7 @@ export function MatchScreen({ theme, view, myId, onTurn, onLeave, banner, roomCo
       }}
     >
       {view && fit ? (
-        <View style={{ width: footW, height: footH }}>
+        <Animated.View style={{ width: footW, height: footH, transform: [{ translateX: knockX }, { translateY: knockY }] }}>
           <View
             style={{
               position: 'absolute', width: fit.width, height: fit.height,
@@ -158,7 +177,7 @@ export function MatchScreen({ theme, view, myId, onTurn, onLeave, banner, roomCo
               <View style={{ backgroundColor: 'rgba(8,20,6,0.7)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6 }}>{status}</View>
             </View>
           ) : null}
-        </View>
+        </Animated.View>
       ) : null}
     </View>
   );

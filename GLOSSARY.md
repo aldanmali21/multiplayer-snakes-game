@@ -53,7 +53,7 @@ Which of the 8 snake looks a Player plays as. In a Room each Species can be take
 _Avoid_: Skin, colour
 
 **Match Settings**:
-The Host's choices for a Match: how many Fruit are on the Board at once (1 to 10), whether walls kill, and whether Snakes crash into each other. When walls are off, a Snake leaving one edge comes back on the opposite edge. A Snake running into its own body always dies.
+The Host's choices for a Match: the Target Score, how many Fruit are on the Board at once (1 to 10), whether walls kill, and whether Snakes crash into each other. When walls are off, a Snake leaving one edge comes back on the opposite edge. A Snake running into its own body always dies.
 _Avoid_: Options, difficulty
 
 **Pause**:

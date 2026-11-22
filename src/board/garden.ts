@@ -631,6 +631,8 @@ export function drawGardenBoard(
     rows: number;
     fruits: { x: number; y: number }[];
     snakes: { body: { x: number; y: number }[]; prev?: { x: number; y: number }[]; species: number; alive: boolean }[];
+    /** Snakes that just crashed, with seconds since the crash. */
+    crashes?: Crash[];
     frac: number;
     time: number;
   },
@@ -677,7 +679,91 @@ export function drawGardenBoard(
         snake(ctx, dx || dy ? pts.map(([x, y]) => [x + dx, y + dy] as Pt) : pts, s.species, c, time);
       }
   }
+  for (const k of opts.crashes ?? []) crash(ctx, k, cols, rows, c, time);
   ctx.restore();
+  // Bursts go on top of the frame too, so a wall hit shows in full.
+  ctx.save();
+  ctx.translate(frame, frame);
+  for (const k of opts.crashes ?? []) crashBurst(ctx, k, c);
+  ctx.restore();
+}
+
+export type Crash = { body: { x: number; y: number }[]; species: number; dir: 'up' | 'down' | 'left' | 'right'; age: number };
+
+/** How long a crash plays before the snake is gone, in seconds. */
+export const CRASH_SECONDS = 1.1;
+
+const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] } as const;
+
+/**
+ * The knock: the snake lurches into what it hit, recoils with a shudder and
+ * a red flash, an impact burst pops at the point of contact, then it fades.
+ */
+export function crash(ctx: Ctx2D, k: Crash, cols: number, rows: number, c: number, time: number) {
+  if (k.body.length < 1 || k.age >= CRASH_SECONDS) return;
+  const t = k.age;
+  const [vx, vy] = DIRS[k.dir];
+  // Lurch forward for 0.08 s, bounce back, then a decaying shudder.
+  const lurch = t < 0.08 ? (t / 0.08) * 0.35 : Math.max(0, 0.35 - (t - 0.08) * 3) - 0.08 * Math.exp(-(t - 0.08) * 8);
+  const shake = Math.sin(t * 70) * 0.09 * Math.exp(-t * 4);
+  const pts = snakePoints(k.body, undefined, 1, cols, rows).map(([x, y], i) => {
+    const w = Math.max(0, 1 - i / 6); // the head end moves most
+    return [x + vx * lurch * w + -vy * shake, y + vy * lurch * w + vx * shake] as Pt;
+  });
+  const fade = t < 0.65 ? 1 : Math.max(0, 1 - (t - 0.65) / (CRASH_SECONDS - 0.65));
+  ctx.layer(fade, () => {
+    snake(ctx, pts, k.species, c, time);
+    // red flash over the body
+    const flash = Math.max(0, Math.sin(Math.min(1, t / 0.5) * Math.PI)) * 0.55;
+    if (flash > 0.01) {
+      ctx.strokeStyle = `rgba(255,40,30,${flash.toFixed(3)})`;
+      ctx.lineWidth = c * 0.62;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * c, y * c) : ctx.moveTo(x * c, y * c)));
+      ctx.stroke();
+    }
+  });
+}
+
+/** Impact burst where the head met the obstacle. */
+export function crashBurst(ctx: Ctx2D, k: Crash, c: number) {
+  if (k.body.length < 1) return;
+  const t = k.age;
+  const [vx, vy] = DIRS[k.dir];
+  const hx = (k.body[0].x + 0.5 + vx * 0.5) * c, hy = (k.body[0].y + 0.5 + vy * 0.5) * c;
+  const p = Math.min(1, t / 0.45);
+  const burst = Math.max(0, 1 - t / 0.6);
+  if (burst > 0) {
+    ctx.strokeStyle = `rgba(255,245,200,${(0.9 * burst).toFixed(3)})`;
+    ctx.lineWidth = c * 0.09 * burst + 0.5;
+    ctx.beginPath();
+    ctx.circle(hx, hy, c * (0.25 + p * 1.1));
+    ctx.stroke();
+    // sparks
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = `rgba(255,200,60,${burst.toFixed(3)})`;
+    ctx.lineWidth = c * 0.08;
+    ctx.beginPath();
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + 0.3;
+      const r0 = c * (0.3 + p * 0.6), r1 = c * (0.55 + p * 1.15);
+      ctx.moveTo(hx + Math.cos(a) * r0, hy + Math.sin(a) * r0);
+      ctx.lineTo(hx + Math.cos(a) * r1, hy + Math.sin(a) * r1);
+    }
+    ctx.stroke();
+    // star flash
+    const sr = c * (0.55 + 0.25 * Math.sin(t * 30)) * burst;
+    ctx.fillStyle = `rgba(255,255,235,${burst.toFixed(3)})`;
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2, r = i % 2 ? sr * 0.4 : sr;
+      if (i) ctx.lineTo(hx + Math.cos(a) * r, hy + Math.sin(a) * r);
+      else ctx.moveTo(hx + Math.cos(a) * r, hy + Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
 }
 
 /** Bring b next to a on a board whose edges wrap (no-op when they are already adjacent). */

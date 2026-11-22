@@ -2,6 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { DEFAULT_SETTINGS, type MatchSettings } from '../game/rules';
 import { useBoardSize } from '../board/useBoardSize';
+import { useAfter } from '../components/useAfter';
 import { HOST_ID } from '../net/hostCore';
 import { useClient, useHost } from '../net/hooks';
 import type { Theme } from '../theme/theme';
@@ -27,6 +28,7 @@ type Prefs = { species: number; settings: MatchSettings };
 export function HostFlow({ theme, name, prefs, onPrefs, onExit }: { theme: Theme; name: string; prefs: Prefs; onPrefs: (p: Partial<Prefs>) => void; onExit: () => void }) {
   const { snap, host, error } = useHost(name, prefs);
   const board = useBoardSize();
+  const showResults = useAfter(snap?.phase === 'over');
   if (error) return <Message theme={theme} title="Couldn't open a room" body={error} onBack={onExit} />;
   if (!snap || !host) return <Message theme={theme} title="Opening room…" />;
   const core = host.core;
@@ -51,7 +53,7 @@ export function HostFlow({ theme, name, prefs, onPrefs, onExit }: { theme: Theme
       />
     );
   }
-  if (snap.phase === 'over' && snap.view) {
+  if (snap.phase === 'over' && snap.view && showResults) {
     return <ResultsScreen theme={theme} state={snap.view.state} myId={HOST_ID} againLabel="Back to room" onAgain={() => core.playAgain()} onHome={onExit} />;
   }
   return (
@@ -71,6 +73,7 @@ export function HostFlow({ theme, name, prefs, onPrefs, onExit }: { theme: Theme
 
 export function ClientFlow({ theme, name, species, address, code, onExit }: { theme: Theme; name: string; species: number; address: string; code: string; onExit: () => void }) {
   const { snap, client, myId } = useClient(address, code, name, species);
+  const showResults = useAfter(snap.room?.phase === 'over');
 
   if (snap.status === 'connecting') return <Message theme={theme} title="Joining…" body={`Connecting to ${address}`} onBack={onExit} />;
   if (snap.status === 'failed') {
@@ -99,7 +102,7 @@ export function ClientFlow({ theme, name, species, address, code, onExit }: { th
       />
     );
   }
-  if (phase === 'over') {
+  if (phase === 'over' && showResults) {
     return <ResultsScreen theme={theme} state={snap.view.state} myId={myId} onHome={onExit} note="Waiting for the host to start another match…" />;
   }
   return (
