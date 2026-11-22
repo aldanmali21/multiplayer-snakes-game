@@ -32,8 +32,7 @@ export function ResultsScreen({ theme, state, myId, onAgain, againLabel = 'Play 
         ) : null}
         <Card theme={theme}>
           {ranked.map((s) => {
-            const i = state.snakes.findIndex((x) => x.id === s.id);
-            const color = theme.snakes[i % theme.snakes.length].head;
+            const color = theme.snakes[s.species % theme.snakes.length].head;
             return (
               <View key={s.id} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ color, fontWeight: '800', fontSize: 17 }}>{s.name}{s.id === myId ? ' (you)' : ''}</Text>

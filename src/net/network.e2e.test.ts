@@ -43,9 +43,9 @@ async function startHost(code = 'GRDN') {
   return { core, port, snap: () => snap!, sockets };
 }
 
-function joinAs(port: number, id: string, name: string, code = 'GRDN') {
+function joinAs(port: number, id: string, name: string, code = 'GRDN', species?: number) {
   const box: { snap: ClientSnapshot } = { snap: { status: 'connecting', room: null, view: null } };
-  const c = new RoomClient({ host: '127.0.0.1', port, code, name, id, onUpdate: (s) => (box.snap = s), connect });
+  const c = new RoomClient({ host: '127.0.0.1', port, code, name, id, species, onUpdate: (s) => (box.snap = s), connect });
   c.connect();
   cleanup.push(() => c.leave());
   return { client: c, box };
@@ -82,6 +82,45 @@ describe('multiplayer over real sockets', () => {
     await until(() => phones.every((p) => p.box.snap.room?.phase === 'lobby'));
     expect(host.snap().players).toHaveLength(4);
   }, 30000);
+
+  it('snake picks, host settings, board shape and pause reach every phone', async () => {
+    const host = await startHost();
+    const ann = joinAs(host.port, 'a', 'Ann', 'GRDN', 4);
+    await until(() => ann.box.snap.status === 'joined');
+    const bob = joinAs(host.port, 'b', 'Bob', 'GRDN', 4); // Ann already has snake 4
+    await until(() => bob.box.snap.status === 'joined' && ann.box.snap.room?.players.length === 3);
+    const species = () => ann.box.snap.room!.players.map((p) => p.species);
+    expect(species()[1]).toBe(4);
+    expect(new Set(species()).size).toBe(3);
+
+    // Bob switches to a free snake; Ann sees it. Taking Ann's is refused.
+    bob.client.pick(6);
+    await until(() => ann.box.snap.room!.players.find((p) => p.id === 'b')!.species === 6);
+    bob.client.pick(4);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(host.snap().players.find((p) => p.id === 'b')!.species).toBe(6);
+
+    host.core.setSettings({ walls: false, snakeCollisions: false, apples: 7 });
+    await until(() => bob.box.snap.room?.settings.apples === 7);
+    expect(bob.box.snap.room!.settings).toEqual({ walls: false, snakeCollisions: false, apples: 7 });
+
+    host.core.start({ width: 400, height: 700 });
+    await until(() => bob.box.snap.room?.phase === 'running', 6000);
+    const state = bob.box.snap.view!.state;
+    expect(state.config.height).toBeGreaterThan(state.config.width);
+    expect(state.fruits).toHaveLength(7);
+    expect(state.snakes.find((s) => s.id === 'b')!.species).toBe(6);
+
+    // Ann pauses for everyone; Bob resumes after the others see it.
+    ann.client.pause();
+    await until(() => bob.box.snap.room?.phase === 'paused' && bob.box.snap.view?.pausedBy === 'Ann');
+    const frozen = host.snap().view!.state.tick;
+    await new Promise((r) => setTimeout(r, 400));
+    expect(host.snap().view!.state.tick).toBe(frozen);
+    bob.client.resume();
+    await until(() => ann.box.snap.room?.phase === 'running', 6000);
+    await until(() => host.snap().view!.state.tick > frozen);
+  }, 20000);
 
   it('a wrong room code is rejected', async () => {
     const host = await startHost();

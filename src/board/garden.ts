@@ -28,15 +28,18 @@ function offscreen(Sk: S, w: number, h: number, draw: (x: Ctx2D) => void): SkIma
 }
 
 /** The lawn: drawn once per board size, seeded so it never shimmers. */
-export function makeGrass(Sk: S, px: number, N: number): SkImage | null {
-  return offscreen(Sk, px, px, (x) => {
+export function makeGrass(Sk: S, pw: number, ph: number, gridW: number, gridH: number): SkImage | null {
+  return offscreen(Sk, pw, ph, (x) => {
     const R = rng(7);
-    const cs = px / N;
-    const k = px / 340;
+    const cs = pw / gridW;
+    const k = cs / 17;
+    // Scatter counts grow with the board's shape; blob sizes follow its short side.
+    const px = Math.min(pw, ph);
+    const area = (pw * ph) / (px * px);
     x.fillStyle = '#4d8a2b';
-    x.fillRect(0, 0, px, px);
-    for (let i = 0; i < 70; i++) {
-      const cx = R() * px, cy = R() * px, r = px * (0.05 + R() * 0.14);
+    x.fillRect(0, 0, pw, ph);
+    for (let i = 0; i < 70 * area; i++) {
+      const cx = R() * pw, cy = R() * ph, r = px * (0.05 + R() * 0.14);
       const gr = x.createRadialGradient(cx, cy, 0, cx, cy, r);
       const c = R() < 0.5 ? '96,150,52' : '52,98,30';
       gr.addColorStop(0, `rgba(${c},.35)`);
@@ -45,21 +48,21 @@ export function makeGrass(Sk: S, px: number, N: number): SkImage | null {
       x.fillRect(cx - r, cy - r, r * 2, r * 2);
     }
     // faint mowing pattern on the grid, so steering stays readable
-    for (let yy = 0; yy < N; yy++)
-      for (let xx = 0; xx < N; xx++) {
+    for (let yy = 0; yy < gridH; yy++)
+      for (let xx = 0; xx < gridW; xx++) {
         x.fillStyle = (xx + yy) % 2 ? 'rgba(240,255,200,.055)' : 'rgba(10,40,5,.06)';
         x.fillRect(xx * cs, yy * cs, cs, cs);
       }
     const cols: string[] = [];
     for (let i = 0; i < 14; i++) cols.push(`hsl(${78 + R() * 34},${38 + R() * 26}%,${20 + R() * 30}%)`);
-    const count = Math.min(36000, (px * px) / 26) | 0;
+    const count = Math.min(48000, (pw * ph) / 26) | 0;
     for (let ci = 0; ci < cols.length; ci++) {
       x.strokeStyle = cols[ci];
       x.lineWidth = (0.55 + (ci % 3) * 0.25) * k;
       x.lineCap = 'round';
       x.beginPath();
       for (let i = 0; i < count / cols.length; i++) {
-        const bx = R() * px, by = R() * px, L = cs * (0.1 + R() * 0.28), a = -Math.PI / 2 + (R() - 0.5) * 0.9, bend = (R() - 0.5) * L * 0.5;
+        const bx = R() * pw, by = R() * ph, L = cs * (0.1 + R() * 0.28), a = -Math.PI / 2 + (R() - 0.5) * 0.9, bend = (R() - 0.5) * L * 0.5;
         x.moveTo(bx, by);
         x.quadraticCurveTo(bx + bend, by - L * 0.5, bx + Math.cos(a) * L, by + Math.sin(a) * L);
       }
@@ -69,14 +72,14 @@ export function makeGrass(Sk: S, px: number, N: number): SkImage | null {
     x.lineWidth = 0.6 * k;
     x.beginPath();
     for (let i = 0; i < count / 9; i++) {
-      const bx = R() * px, by = R() * px, L = cs * (0.08 + R() * 0.15);
+      const bx = R() * pw, by = R() * ph, L = cs * (0.08 + R() * 0.15);
       x.moveTo(bx, by);
       x.lineTo(bx + (R() - 0.5) * L * 0.6, by - L);
     }
     x.stroke();
     // clover
-    for (let i = 0; i < 34; i++) {
-      const cx = R() * px, cy = R() * px;
+    for (let i = 0; i < 34 * area; i++) {
+      const cx = R() * pw, cy = R() * ph;
       for (let j = 0; j < 5; j++) {
         const ox = cx + (R() - 0.5) * cs * 0.8, oy = cy + (R() - 0.5) * cs * 0.8, r = cs * 0.07;
         x.fillStyle = R() < 0.5 ? '#3f7f27' : '#559a33';
@@ -89,8 +92,8 @@ export function makeGrass(Sk: S, px: number, N: number): SkImage | null {
       }
     }
     // daisies
-    for (let i = 0; i < 9; i++) {
-      const cx = R() * px, cy = R() * px, r = cs * 0.1;
+    for (let i = 0; i < 9 * area; i++) {
+      const cx = R() * pw, cy = R() * ph, r = cs * 0.1;
       x.fillStyle = 'rgba(255,255,255,.92)';
       for (let p = 0; p < 8; p++) {
         const a = (p * Math.PI) / 4;
@@ -104,8 +107,8 @@ export function makeGrass(Sk: S, px: number, N: number): SkImage | null {
       x.fill();
     }
     // dappled sunlight
-    for (let i = 0; i < 16; i++) {
-      const cx = R() * px, cy = R() * px, r = cs * (1.5 + R() * 3);
+    for (let i = 0; i < 16 * area; i++) {
+      const cx = R() * pw, cy = R() * ph, r = cs * (1.5 + R() * 3);
       const gr = x.createRadialGradient(cx, cy, 0, cx, cy, r);
       gr.addColorStop(0, 'rgba(255,248,190,.13)');
       gr.addColorStop(1, 'rgba(255,248,190,0)');
@@ -114,12 +117,12 @@ export function makeGrass(Sk: S, px: number, N: number): SkImage | null {
     }
     // inner shadow cast by the wooden frame
     const e = cs * 0.9;
-    for (const [a, b, c2, d] of [[0, 0, 0, e], [0, px, 0, px - e], [0, 0, e, 0], [px, 0, px - e, 0]]) {
+    for (const [a, b, c2, d] of [[0, 0, 0, e], [0, ph, 0, ph - e], [0, 0, e, 0], [pw, 0, pw - e, 0]]) {
       const gr = x.createLinearGradient(a, b, c2, d);
       gr.addColorStop(0, 'rgba(10,25,5,.5)');
       gr.addColorStop(1, 'rgba(10,25,5,0)');
       x.fillStyle = gr;
-      x.fillRect(0, 0, px, px);
+      x.fillRect(0, 0, pw, ph);
     }
   });
 }
@@ -266,6 +269,10 @@ export const SPECIES = [
   { name: 'Corn snake', base: '#ec7a35', dark: '#5a200b', light: '#ffd0a0', pat: 'corn' },
   { name: 'Blue racer', base: '#3d7be0', dark: '#0f2250', light: '#bcd6ff', pat: 'racer' },
   { name: 'Milk snake', base: '#d9333c', dark: '#2a0a0c', light: '#ffb3a8', pat: 'milk' },
+  { name: 'Rattlesnake', base: '#b58d5c', dark: '#3b2814', light: '#ecd6ad', pat: 'diamond' },
+  { name: 'Albino python', base: '#f1e7cf', dark: '#8a6d3b', light: '#ffffff', pat: 'albino' },
+  { name: 'Black mamba', base: '#61666b', dark: '#16181a', light: '#b4b9be', pat: 'plain' },
+  { name: 'Garter snake', base: '#2f3d2a', dark: '#0e140c', light: '#93a67c', pat: 'garter' },
 ] as const;
 
 function chaikin(p: Pt[], n: number): Pt[] {
@@ -326,19 +333,13 @@ export function snake(ctx: Ctx2D, pts: Pt[], species: number, c: number, time: n
   union((i) => { const [x, y] = P(i); return [x + c * 0.08, y + c * 0.13, rad(i) * 0.95]; }, 'rgba(8,30,4,.22)');
   union((i) => { const [x, y] = P(i); return [x, y, rad(i) + c * 0.025]; }, sp.dark);
   if (sp.pat === 'milk') {
-    // banded: group circles by band colour so it's a handful of paths, not hundreds
-    const bands: Record<string, number[]> = {};
+    // banded: paint each disc tail to head so every band keeps its width
     for (let i = n - 1; i >= 0; i--) {
       const m = i % 18;
       const col = m < 9 ? sp.base : m < 11 ? '#1a1a1a' : m < 14 ? '#f1e3c0' : m < 16 ? '#1a1a1a' : sp.base;
-      (bands[col] ??= []).push(i);
-    }
-    // draw tail-to-head order matters little for flat bands; keep head on top by painting base last
-    for (const [col, idx] of Object.entries(bands)) {
-      ctx.beginPath();
-      for (const i of idx) { const [x, y] = P(i); ctx.moveTo(x + rad(i) * 0.9, y); ctx.arc(x, y, rad(i) * 0.9, 0, 7); }
+      const [x, y] = P(i);
       ctx.fillStyle = col;
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, rad(i) * 0.9, 0, 7); ctx.fill();
     }
   } else {
     union((i) => { const [x, y] = P(i); return [x, y, rad(i) * 0.9]; }, sp.base);
@@ -360,11 +361,52 @@ export function snake(ctx: Ctx2D, pts: Pt[], species: number, c: number, time: n
       ctx.beginPath(); ctx.ellipse(0, 0, r * 0.42, r * 0.7, 0); ctx.fill(); ctx.stroke();
       ctx.restore();
     }
+    if (sp.pat === 'diamond' && i % 10 === 0) {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+      ctx.fillStyle = '#f3e3c0';
+      ctx.beginPath(); ctx.moveTo(-r * 1.0, 0); ctx.lineTo(0, -r * 0.82); ctx.lineTo(r * 1.0, 0); ctx.lineTo(0, r * 0.82); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#4a2f17';
+      ctx.beginPath(); ctx.moveTo(-r * 0.8, 0); ctx.lineTo(0, -r * 0.64); ctx.lineTo(r * 0.8, 0); ctx.lineTo(0, r * 0.64); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#7a5530';
+      ctx.beginPath(); ctx.moveTo(-r * 0.45, 0); ctx.lineTo(0, -r * 0.34); ctx.lineTo(r * 0.45, 0); ctx.lineTo(0, r * 0.34); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    if (sp.pat === 'albino' && i % 8 === 0) {
+      const h = ((i * 7919 + 104729) % 1000) / 1000;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a + (h - 0.5) * 0.8);
+      ctx.fillStyle = 'rgba(242,190,60,.85)';
+      ctx.beginPath(); ctx.ellipse((h - 0.5) * r * 0.5, 0, r * (0.35 + h * 0.2), r * 0.55, 0); ctx.fill();
+      ctx.restore();
+    }
     if (sp.pat === 'racer' && i % 5 === 0) {
       const h = ((i * 9301 + 49297) % 233280) / 233280;
       ctx.fillStyle = 'rgba(10,25,70,.35)';
       ctx.beginPath(); ctx.arc(x + Math.cos(a + 1.57) * (h - 0.5) * r, y + Math.sin(a + 1.57) * (h - 0.5) * r, r * 0.09, 0, 7); ctx.fill();
     }
+  }
+  if (sp.pat === 'garter') {
+    ctx.lineCap = 'round';
+    for (const [off, w, col] of [[0, 0.09, '#f2d35b'], [-0.58, 0.05, 'rgba(225,205,110,.75)'], [0.58, 0.05, 'rgba(225,205,110,.75)']] as const) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = Math.max(0.8, c * w);
+      ctx.beginPath();
+      for (let i = 3; i < n - 1; i++) {
+        const [x, y] = P(i), a = ang(i), r = rad(i);
+        const px = x + Math.cos(a + 1.57) * off * r, py = y + Math.sin(a + 1.57) * off * r;
+        if (i > 3) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.stroke();
+    }
+  }
+  if (sp.pat === 'diamond' && n > 6) {
+    // rattle on the tail tip
+    const [tx, ty] = P(n - 1), ta = ang(n - 1);
+    ctx.save(); ctx.translate(tx, ty); ctx.rotate(ta);
+    for (let k = 0; k < 3; k++) {
+      ctx.fillStyle = k % 2 ? '#d8c39a' : '#b9a173';
+      ctx.beginPath(); ctx.ellipse(-c * (0.08 + k * 0.1), 0, c * 0.07, c * 0.11 - k * c * 0.015, 0); ctx.fill();
+    }
+    ctx.restore();
   }
   union((i) => { const [x, y] = P(i); return [x - rad(i) * 0.18, y - rad(i) * 0.24, rad(i) * 0.52]; }, 'rgba(255,255,255,.17)');
 
@@ -433,6 +475,14 @@ export function snake(ctx: Ctx2D, pts: Pt[], species: number, c: number, time: n
     ctx.fillStyle = '#d9333c'; ctx.fillRect(r * 0.95, -r, r, r * 2);
     ctx.restore();
   }
+  if (sp.pat === 'diamond') {
+    ctx.strokeStyle = 'rgba(60,35,15,.7)'; ctx.lineWidth = c * 0.05; ctx.lineCap = 'round';
+    for (const k of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 0.75, k * r * 0.3); ctx.lineTo(-r * 0.3, k * r * 0.62); ctx.stroke(); }
+  }
+  if (sp.pat === 'garter') {
+    ctx.fillStyle = '#f2d35b';
+    ctx.beginPath(); ctx.ellipse(-r * 0.55, 0, r * 0.18, r * 0.08, 0); ctx.fill();
+  }
   if (sp.pat === 'corn') {
     ctx.fillStyle = '#b23516';
     ctx.beginPath(); ctx.moveTo(r * 0.85, 0); ctx.lineTo(-r * 0.3, -r * 0.32); ctx.lineTo(-r * 0.1, 0); ctx.lineTo(-r * 0.3, r * 0.32); ctx.closePath(); ctx.fill();
@@ -473,50 +523,87 @@ export function drawGardenBoard(
   ctx: Ctx2D,
   tex: BoardTextures,
   opts: {
-    size: number; // lawn size in px
+    cell: number; // one grid cell in px
     frame: number; // wood border in px
-    N: number;
+    cols: number;
+    rows: number;
     fruits: { x: number; y: number }[];
     snakes: { body: { x: number; y: number }[]; prev?: { x: number; y: number }[]; species: number; alive: boolean }[];
     frac: number;
     time: number;
   },
 ) {
-  const { size, frame, N, frac, time } = opts;
-  const total = size + frame * 2;
+  const { cell: c, frame, cols, rows, frac, time } = opts;
+  const lw = c * cols, lh = c * rows;
+  const tw = lw + frame * 2, th = lh + frame * 2;
   // wooden frame
   ctx.save();
   ctx.beginPath();
-  roundRect(ctx, 0, 0, total, total, frame * 1.6);
+  roundRect(ctx, 0, 0, tw, th, frame * 1.6);
   ctx.clip();
-  if (tex.wood) ctx.drawImage(tex.wood, 0, 0, total * 1.6, total);
-  else { ctx.fillStyle = '#6b4423'; ctx.fillRect(0, 0, total, total); }
-  const bevel = ctx.createLinearGradient(0, 0, 0, total);
+  if (tex.wood) ctx.drawImage(tex.wood, 0, 0, Math.max(tw, th) * 1.6, Math.max(tw, th));
+  else { ctx.fillStyle = '#6b4423'; ctx.fillRect(0, 0, tw, th); }
+  const bevel = ctx.createLinearGradient(0, 0, 0, th);
   bevel.addColorStop(0, 'rgba(255,255,255,.18)'); bevel.addColorStop(0.5, 'rgba(255,255,255,0)'); bevel.addColorStop(1, 'rgba(0,0,0,.28)');
-  ctx.fillStyle = bevel; ctx.fillRect(0, 0, total, total);
+  ctx.fillStyle = bevel; ctx.fillRect(0, 0, tw, th);
   ctx.restore();
 
   ctx.save();
   ctx.translate(frame, frame);
   ctx.beginPath();
-  roundRect(ctx, 0, 0, size, size, frame * 0.8);
+  roundRect(ctx, 0, 0, lw, lh, frame * 0.8);
   ctx.clip();
-  if (tex.grass) ctx.drawImage(tex.grass, 0, 0, size, size);
-  else { ctx.fillStyle = '#4d8a2b'; ctx.fillRect(0, 0, size, size); }
-  const c = size / N;
+  if (tex.grass) ctx.drawImage(tex.grass, 0, 0, lw, lh);
+  else { ctx.fillStyle = '#4d8a2b'; ctx.fillRect(0, 0, lw, lh); }
   for (const f of opts.fruits) apple(ctx, (f.x + 0.5) * c, (f.y + 0.52) * c, c * 0.36, Math.sin(time * 3 + f.x * 1.7) * c * 0.02);
   for (const s of opts.snakes) {
     if (!s.alive || s.body.length < 1) continue;
-    const pts: Pt[] = s.body.map((p, i) => {
-      const q = s.prev && s.prev.length ? s.prev[i] ?? s.prev[s.prev.length - 1] : p;
-      return [q.x + (p.x - q.x) * frac + 0.5, q.y + (p.y - q.y) * frac + 0.5];
-    });
-    snake(ctx, pts, s.species, c, time);
+    const pts = snakePoints(s.body, s.prev, frac, cols, rows);
+    // A snake crossing an open edge is drawn on both sides, so it slides out one side and in the other.
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [x, y] of pts) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+    const dxs = [0, ...(minX < 1 ? [cols] : []), ...(maxX > cols - 1 ? [-cols] : [])];
+    const dys = [0, ...(minY < 1 ? [rows] : []), ...(maxY > rows - 1 ? [-rows] : [])];
+    for (const dx of dxs)
+      for (const dy of dys) {
+        snake(ctx, dx || dy ? pts.map(([x, y]) => [x + dx, y + dy] as Pt) : pts, s.species, c, time);
+      }
   }
   ctx.restore();
 }
 
-function roundRect(ctx: Ctx2D, x: number, y: number, w: number, h: number, r: number) {
+/** Bring b next to a on a board whose edges wrap (no-op when they are already adjacent). */
+function near(a: number, b: number, size: number) {
+  while (b - a > size / 2) b -= size;
+  while (a - b > size / 2) b += size;
+  return b;
+}
+
+/**
+ * Cell-centre points of a snake between the last tick and this one. Segments
+ * that wrapped around the board are unwrapped so the body stays one piece.
+ */
+export function snakePoints(
+  body: { x: number; y: number }[],
+  prev: { x: number; y: number }[] | undefined,
+  frac: number,
+  cols: number,
+  rows: number,
+): Pt[] {
+  const out: Pt[] = [];
+  let px = 0, py = 0;
+  for (let i = 0; i < body.length; i++) {
+    let x = body[i].x, y = body[i].y;
+    if (i > 0) { x = near(px, x, cols); y = near(py, y, rows); }
+    px = x; py = y;
+    const q = prev && prev.length ? prev[i] ?? prev[prev.length - 1] : body[i];
+    const qx = near(x, q.x, cols), qy = near(y, q.y, rows);
+    out.push([qx + (x - qx) * frac + 0.5, qy + (y - qy) * frac + 0.5]);
+  }
+  return out;
+}
+
+export function roundRect(ctx: Ctx2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
   ctx.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -527,4 +614,11 @@ function roundRect(ctx: Ctx2D, x: number, y: number, w: number, h: number, r: nu
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+/** A short S-curve, for showing a species on the snake picker. Coordinates are in cells. */
+export function previewPoints(): Pt[] {
+  const pts: Pt[] = [];
+  for (let i = 0; i < 7; i++) pts.push([4.5 - i * 0.62, 1.5 + Math.sin(i * 0.9) * 0.55]);
+  return pts;
 }

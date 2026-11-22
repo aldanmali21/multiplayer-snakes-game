@@ -26,7 +26,7 @@ afterEach(() => vi.useRealTimers());
 describe('joining', () => {
   it('lists the host alone at first', () => {
     make();
-    expect(snap.players).toEqual([{ id: HOST_ID, name: 'Hosty', isHost: true, connected: true }]);
+    expect(snap.players).toEqual([{ id: HOST_ID, name: 'Hosty', isHost: true, connected: true, species: 0 }]);
     expect(snap.phase).toBe('lobby');
   });
 
@@ -100,6 +100,15 @@ describe('running a match', () => {
     vi.advanceTimersByTime(500);
     expect(a.last('tick')!.state.tick).toBeGreaterThan(t0);
     expect(a.last('tick')!.state.snakes.map((s) => s.id)).toEqual([HOST_ID, 'a']);
+  });
+
+  it("sends every phone the board shaped for the host's screen", () => {
+    const core = make();
+    const a = join(core, 'a');
+    core.start({ width: 360, height: 640 });
+    const cfg = a.last('tick')!.state.config;
+    expect(cfg.height).toBeGreaterThan(cfg.width);
+    expect(snap.view!.state.config).toEqual(cfg);
   });
 
   it('blocks new joiners once the match has started', () => {
@@ -233,5 +242,130 @@ describe('protocol helpers', () => {
   it('makes four-letter codes without confusing characters', () => {
     for (let i = 0; i < 200; i++) expect(randomCode()).toMatch(/^[A-HJ-NP-Z2-9]{4}$/);
     expect(normaliseCode(' ab12 ')).toBe('AB12');
+  });
+});
+
+describe('choosing snakes', () => {
+  it('gives each joiner a different snake, honouring their favourite when free', () => {
+    const core = make();
+    const a = new FakeConn();
+    core.handle(a, { t: 'hello', id: 'a', name: 'Ann', code: 'ABCD', species: 5 });
+    const b = new FakeConn();
+    core.handle(b, { t: 'hello', id: 'b', name: 'Bob', code: 'ABCD', species: 5 }); // taken by Ann
+    const species = snap.players.map((p) => p.species);
+    expect(species[1]).toBe(5);
+    expect(new Set(species).size).toBe(3);
+  });
+
+  it('lets a player switch to a free snake and refuses a taken one', () => {
+    const core = make();
+    const a = join(core, 'a');
+    join(core, 'b');
+    const bSpecies = snap.players.find((p) => p.id === 'b')!.species;
+    core.handle(a, { t: 'pick', species: 7 });
+    expect(snap.players.find((p) => p.id === 'a')!.species).toBe(7);
+    core.handle(a, { t: 'pick', species: bSpecies });
+    expect(snap.players.find((p) => p.id === 'a')!.species).toBe(7);
+    expect(core.pick(HOST_ID, 7)).toBe(false);
+    expect(core.pick(HOST_ID, 4)).toBe(true);
+    expect(a.last('room')!.players.find((p) => p.id === HOST_ID)!.species).toBe(4);
+  });
+
+  it('ignores invalid snake numbers', () => {
+    const core = make();
+    const a = join(core, 'a');
+    const before = snap.players[1].species;
+    core.handle(a, { t: 'pick', species: 99 });
+    core.handle(a, { t: 'pick', species: -1 });
+    expect(snap.players[1].species).toBe(before);
+  });
+
+  it('cannot change snakes during a match', () => {
+    const core = make();
+    const a = join(core, 'a');
+    core.start();
+    core.handle(a, { t: 'pick', species: 7 });
+    expect(snap.players[1].species).not.toBe(7);
+  });
+
+  it('uses the chosen snakes in the match', () => {
+    const core = make();
+    const a = join(core, 'a');
+    core.handle(a, { t: 'pick', species: 6 });
+    core.pick(HOST_ID, 3);
+    core.start();
+    expect(snap.view!.state.snakes.map((s) => s.species)).toEqual([3, 6]);
+  });
+});
+
+describe('settings', () => {
+  it('sends the host settings to phones and uses them in the match', () => {
+    const core = make();
+    const a = join(core, 'a');
+    expect(a.last('room')!.settings).toEqual({ walls: true, snakeCollisions: true, apples: 3 });
+    core.setSettings({ walls: false });
+    expect(a.last('room')!.settings).toEqual({ walls: false, snakeCollisions: true, apples: 3 });
+    core.setSettings({ snakeCollisions: false });
+    core.start();
+    expect(snap.view!.state.config.walls).toBe(false);
+    expect(snap.view!.state.config.snakeCollisions).toBe(false);
+  });
+
+  it('cannot change settings mid-match', () => {
+    const core = make();
+    core.start();
+    core.setSettings({ walls: false });
+    expect(snap.settings.walls).toBe(true);
+  });
+});
+
+describe('pausing', () => {
+  it('any player can pause and resume for everyone', () => {
+    const core = make();
+    const a = join(core, 'a', 'Ann');
+    core.start();
+    vi.advanceTimersByTime(3000);
+    vi.advanceTimersByTime(500);
+    core.handle(a, { t: 'pause' });
+    expect(snap.phase).toBe('paused');
+    expect(snap.view!.pausedBy).toBe('Ann');
+    expect(a.last('tick')!.pausedBy).toBe('Ann');
+    const frozen = snap.view!.state.tick;
+    vi.advanceTimersByTime(5000);
+    expect(snap.view!.state.tick).toBe(frozen);
+    // Turns are ignored while paused.
+    core.handle(a, { t: 'turn', dir: 'down' });
+    expect(snap.view!.state.snakes[1].queue).toEqual([]);
+
+    core.resume(HOST_ID);
+    expect(snap.phase).toBe('countdown');
+    expect(snap.view!.pausedBy).toBeUndefined();
+    vi.advanceTimersByTime(3000);
+    expect(snap.phase).toBe('running');
+    vi.advanceTimersByTime(300);
+    expect(snap.view!.state.tick).toBeGreaterThan(frozen);
+  });
+
+  it('cannot pause in the lobby or resume when not paused', () => {
+    const core = make();
+    core.pause(HOST_ID);
+    expect(snap.phase).toBe('lobby');
+    core.start();
+    vi.advanceTimersByTime(3000);
+    core.resume(HOST_ID);
+    expect(snap.phase).toBe('running');
+  });
+
+  it('a phone that drops while paused keeps its seat for the grace period', () => {
+    const core = make();
+    const a = join(core, 'a');
+    core.start();
+    vi.advanceTimersByTime(3000);
+    core.pause(HOST_ID);
+    core.disconnected(a);
+    expect(snap.players).toHaveLength(2);
+    const back = new FakeConn();
+    core.handle(back, { t: 'hello', id: 'a', name: 'a', code: 'ABCD' });
+    expect(back.last('tick')!.pausedBy).toBe('Hosty');
   });
 });

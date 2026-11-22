@@ -1,9 +1,10 @@
+import type { MatchSettings } from '../game/rules';
 import { useEffect, useRef, useState } from 'react';
 import type { HostSnapshot } from './hostCore';
 import { startHost, type RunningHost } from './tcpHost';
 import { RoomClient, discoverRooms, tcpConnect, type ClientSnapshot, type FoundRoom } from './client';
 
-export function useHost(name: string) {
+export function useHost(name: string, prefs: { species: number; settings: MatchSettings }) {
   const [snap, setSnap] = useState<HostSnapshot | null>(null);
   const [host, setHost] = useState<RunningHost | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -11,7 +12,7 @@ export function useHost(name: string) {
   useEffect(() => {
     let cancelled = false;
     let running: RunningHost | null = null;
-    startHost(name, (s) => !cancelled && setSnap(s), (m) => !cancelled && setError(m))
+    startHost(name, prefs, (s) => !cancelled && setSnap(s), (m) => !cancelled && setError(m))
       .then((h) => {
         if (cancelled) return h.stop();
         running = h;
@@ -29,13 +30,13 @@ export function useHost(name: string) {
   return { snap, host, error };
 }
 
-export function useClient(address: string, code: string, name: string) {
+export function useClient(address: string, code: string, name: string, species: number) {
   const [snap, setSnap] = useState<ClientSnapshot>({ status: 'connecting', room: null, view: null });
   const clientRef = useRef<RoomClient | null>(null);
   const idRef = useRef(`p${Math.random().toString(36).slice(2, 10)}`);
 
   useEffect(() => {
-    const c = new RoomClient({ host: address, code, name, id: idRef.current, onUpdate: setSnap, connect: tcpConnect });
+    const c = new RoomClient({ host: address, code, name, species, id: idRef.current, onUpdate: setSnap, connect: tcpConnect });
     clientRef.current = c;
     c.connect();
     return () => c.leave();

@@ -13,7 +13,46 @@ export type Config = {
   startLength: number;
   /** Milliseconds between ticks (used by the Host's loop, not by the rules). */
   tickMs: number;
+  /** true: touching a Wall kills. false: snakes wrap around to the opposite side. */
+  walls: boolean;
+  /** true: hitting another snake kills. false: snakes pass through each other. */
+  snakeCollisions: boolean;
+  /** How many apples are on the board at once. */
+  apples: number;
 };
+
+/** The parts of the Config that players may change before a match. */
+export type MatchSettings = Pick<Config, 'walls' | 'snakeCollisions' | 'apples'>;
+export const DEFAULT_SETTINGS: MatchSettings = { walls: true, snakeCollisions: true, apples: 3 };
+export const MIN_APPLES = 1;
+export const MAX_APPLES = 10;
+
+/** Cleans settings that came from storage or over the network. */
+export function sanitizeSettings(s: Partial<MatchSettings> | undefined): MatchSettings {
+  const apples = Math.round(Number(s?.apples ?? DEFAULT_SETTINGS.apples));
+  return {
+    walls: typeof s?.walls === 'boolean' ? s.walls : DEFAULT_SETTINGS.walls,
+    snakeCollisions: typeof s?.snakeCollisions === 'boolean' ? s.snakeCollisions : DEFAULT_SETTINGS.snakeCollisions,
+    apples: Number.isFinite(apples) ? Math.min(MAX_APPLES, Math.max(MIN_APPLES, apples)) : DEFAULT_SETTINGS.apples,
+  };
+}
+
+/** Cells on the board's short side. The long side follows the screen's shape. */
+export const BOARD_SHORT_SIDE = 18;
+const BOARD_MAX_LONG_SIDE = 34;
+
+/**
+ * Picks a board that fills a play area of the given shape (width / height),
+ * so the lawn uses the whole screen instead of sitting in a small square.
+ */
+export function boardSizeFor(aspect: number): { width: number; height: number } {
+  const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const long = Math.max(BOARD_SHORT_SIDE, Math.min(BOARD_MAX_LONG_SIDE, Math.round(BOARD_SHORT_SIDE * Math.max(a, 1 / a))));
+  return a >= 1 ? { width: long, height: BOARD_SHORT_SIDE } : { width: BOARD_SHORT_SIDE, height: long };
+}
+
+/** Number of snake species a player can choose from. */
+export const SPECIES_COUNT = 8;
 
 export const DEFAULT_CONFIG: Config = {
   width: 20,
@@ -21,6 +60,9 @@ export const DEFAULT_CONFIG: Config = {
   targetScore: 20,
   startLength: 3,
   tickMs: 125,
+  walls: true,
+  snakeCollisions: true,
+  apples: 3,
 };
 
 export const MIN_PLAYERS = 1;
@@ -29,6 +71,8 @@ export const MAX_PLAYERS = 4;
 export type Snake = {
   id: string;
   name: string;
+  /** Which of the SPECIES_COUNT snake looks this player chose. */
+  species: number;
   /** Head first. Empty once the snake is dead. */
   body: Vec[];
   dir: Dir;
@@ -45,7 +89,7 @@ export type MatchState = {
   config: Config;
   snakes: Snake[];
   fruits: Vec[];
-  /** Number of fruits kept on the board (one per player). */
+  /** Number of apples kept on the board. */
   fruitTarget: number;
   status: 'running' | 'over';
   winners: string[];
@@ -53,7 +97,7 @@ export type MatchState = {
   rng: number;
 };
 
-export type PlayerInfo = { id: string; name: string };
+export type PlayerInfo = { id: string; name: string; species?: number };
 
 const VECTORS: Record<Dir, Vec> = {
   up: { x: 0, y: -1 },
@@ -106,13 +150,13 @@ export function createMatch(
       x: head.x + back.x * n,
       y: head.y + back.y * n,
     }));
-    return { id: p.id, name: p.name, body, dir, queue: [], alive: true, score: 0, deathLength: 0 };
+    return { id: p.id, name: p.name, species: p.species ?? i, body, dir, queue: [], alive: true, score: 0, deathLength: 0 };
   });
   const base: MatchState = {
     config,
     snakes,
     fruits: [],
-    fruitTarget: players.length,
+    fruitTarget: Math.min(MAX_APPLES, Math.max(MIN_APPLES, Math.round(config.apples))),
     status: 'running',
     winners: [],
     tick: 0,
@@ -159,17 +203,22 @@ export function step(state: MatchState): MatchState {
     const dir = s.queue.length ? s.queue[0] : s.dir;
     const queue = s.queue.slice(1);
     const v = VECTORS[dir];
-    const head = { x: s.body[0].x + v.x, y: s.body[0].y + v.y };
+    let head = { x: s.body[0].x + v.x, y: s.body[0].y + v.y };
+    if (!state.config.walls) head = { x: (head.x + width) % width, y: (head.y + height) % height };
     const grows = state.fruits.some((f) => f.x === head.x && f.y === head.y);
     const body = [head, ...(grows ? s.body : s.body.slice(0, -1))];
     return { snake: { ...s, dir, queue }, head, grows, body };
   });
 
   // 2. Collisions are judged against the bodies as they will be after the move.
-  const occupied = new Map<string, number>();
+  const { snakeCollisions } = state.config;
+  const occupiedBy = new Map<string, Set<string>>();
   for (const m of moves) {
     m.body.forEach((c, idx) => {
-      if (idx > 0) occupied.set(key(c), (occupied.get(key(c)) ?? 0) + 1);
+      if (idx === 0) return;
+      const k = key(c);
+      if (!occupiedBy.has(k)) occupiedBy.set(k, new Set());
+      occupiedBy.get(k)!.add(m.snake.id);
     });
   }
   const headCounts = new Map<string, number>();
@@ -181,13 +230,15 @@ export function step(state: MatchState): MatchState {
   const snakes = moves.map((m) => {
     if (!m.head) return m.snake;
     const h = m.head;
+    const owners = occupiedBy.get(key(h));
+    const hitsBody = owners ? (snakeCollisions ? owners.size > 0 : owners.has(m.snake.id)) : false;
     const dead =
       h.x < 0 ||
       h.y < 0 ||
       h.x >= width ||
       h.y >= height ||
-      occupied.has(key(h)) ||
-      (headCounts.get(key(h)) ?? 0) > 1;
+      hitsBody ||
+      (snakeCollisions && (headCounts.get(key(h)) ?? 0) > 1);
     if (dead) return kill(state.snakes.find((s) => s.id === m.snake.id)!);
     if (m.grows) eaten.add(key(h));
     return { ...m.snake, body: m.body, score: m.snake.score + (m.grows ? 1 : 0) };

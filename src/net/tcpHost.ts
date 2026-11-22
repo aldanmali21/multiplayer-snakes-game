@@ -1,5 +1,6 @@
 import TcpSocket from 'react-native-tcp-socket';
 import { createUdp } from './udp';
+import type { MatchSettings } from '../game/rules';
 import { HostCore, type HostSnapshot } from './hostCore';
 import { attachSocket } from './hostWire';
 import type { SocketLike } from './clientCore';
@@ -15,11 +16,12 @@ export type RunningHost = {
 /** Opens the TCP port, advertises the room over UDP and wires sockets into a HostCore. */
 export async function startHost(
   hostName: string,
+  prefs: { species: number; settings: MatchSettings },
   onUpdate: (s: HostSnapshot) => void,
   onError: (message: string) => void,
 ): Promise<RunningHost> {
   const ip = await getLocalIp();
-  const core = new HostCore({ hostName, code: randomCode(), onUpdate });
+  const core = new HostCore({ hostName, code: randomCode(), onUpdate, hostSpecies: prefs.species, settings: prefs.settings });
 
   const server = TcpSocket.createServer((socket) => attachSocket(core, socket as unknown as SocketLike));
   server.on('error', (e) => onError(`Could not open the room: ${e.message}`));

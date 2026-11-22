@@ -10,10 +10,10 @@ An Android game where 1 to 4 Players steer Snakes on a shared Board, eat Fruit t
 - No internet, no server, no database, no accounts.
 
 ## Rules
-- Board: 20×20 grid enclosed by Walls. Snakes move one cell per tick at 8 ticks per second.
+- Board: a grid 18 cells across its short side, with the long side (up to 34) chosen to fill the screen of the phone that starts the Match (the Host's in a Room). Every phone gets the same Board; a phone held the other way shows it turned a quarter turn with swipes remapped. Snakes move one cell per tick at 8 ticks per second.
 - Start: each Snake has length 3, starts in its own corner facing the centre, after a 3-second countdown.
-- Fruit: one kind, +1 Growth Score and +1 length. The Board holds one Fruit per Player in the Match; a new one spawns on a free cell when one is eaten.
-- Death: touching a Wall, its own body or another Snake's body. Two heads meeting on the same cell both die. A dead Snake's body disappears immediately.
+- Fruit: one kind, +1 Growth Score and +1 length. The Board holds the number of Fruit chosen in Match Settings (1 to 10, default 3); a new one spawns on a free cell when one is eaten.
+- Death: touching a Wall, its own body or another Snake's body. Two heads meeting on the same cell both die. Match Settings can turn off deadly Walls (Snakes wrap to the opposite edge) and crashing into other Snakes (they pass through each other); a Snake's own body always kills it. A dead Snake's body disappears immediately.
 - Winning: the first Snake to reach a Growth Score of 20 wins. Snakes reaching 20 on the same tick share the win. If every Snake dies first, the longest Snake at death wins (ties share).
 - Single-player is the same rules with one Snake, run locally with no networking.
 - The Target Score, Board size and tick rate are constants that are easy to tune.
@@ -33,6 +33,8 @@ An Android game where 1 to 4 Players steer Snakes on a shared Board, eat Fruit t
 - Room: Player list, Room code and Host IP, Start (Host only).
 - Match: Board, Growth Scores of all Players at the top, swipe to steer. Dead Players keep watching until the Match ends. Screen stays awake during a Match.
 - Results: Winner(s), then Play Again returns everyone to the same Room.
+- Species: 8 snake looks. Play alone shows a setup screen to pick a Species and Match Settings before starting. In a Room every Player picks a Species; ones taken by others are locked and show who has them. The Host's Match Settings are shown read-only to the others.
+- Pause: any Player can pause the Match for everyone; resuming runs the 3-second countdown. Single-player pauses itself when the app goes to the background.
 
 ## Testing
 - Rules live in a plain TypeScript module with automated tests (movement, collisions, Fruit, growth, winning, ties).

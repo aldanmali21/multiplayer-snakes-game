@@ -22,6 +22,11 @@ async function apply(on: boolean) {
 /** Remembers the choice across matches during this app session. */
 let remembered = false;
 
+/** Whether the next match screen will open in full screen (landscape). */
+export function fullscreenRemembered() {
+  return remembered;
+}
+
 export function useFullscreen() {
   const [on, setOn] = useState(remembered);
 

@@ -5,6 +5,8 @@ import {
   step,
   turn,
   DEFAULT_CONFIG,
+  boardSizeFor,
+  sanitizeSettings,
   type MatchState,
   type Snake,
   type Vec,
@@ -50,9 +52,9 @@ describe('createMatch', () => {
     expect(new Set(quadrants).size).toBe(4);
   });
 
-  it('places one fruit per player on free cells', () => {
-    const m = createMatch(players(3), {}, 7);
-    expect(m.fruits).toHaveLength(3);
+  it('places the chosen number of apples on free cells', () => {
+    const m = createMatch(players(3), { apples: 5 }, 7);
+    expect(m.fruits).toHaveLength(5);
     const occupied = new Set(m.snakes.flatMap((s) => s.body.map((c) => `${c.x},${c.y}`)));
     for (const f of m.fruits) expect(occupied.has(`${f.x},${f.y}`)).toBe(false);
   });
@@ -113,6 +115,7 @@ describe('fruit and growth', () => {
     const m = scenario(
       [{ id: 'p0', body: [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }] }],
       [{ x: 6, y: 5 }],
+      { apples: 1 },
     );
     const next = step(m);
     const s = snake(next, 'p0');
@@ -122,14 +125,14 @@ describe('fruit and growth', () => {
     expect(next.fruits[0]).not.toEqual({ x: 6, y: 5 });
   });
 
-  it('keeps the fruit count equal to the number of players', () => {
-    let m = createMatch(players(2), {}, 11);
+  it('keeps the apple count steady as apples are eaten', () => {
+    let m = createMatch(players(2), { apples: 2 }, 11);
     for (let i = 0; i < 30; i++) m = step(m);
     expect(m.fruits).toHaveLength(2);
   });
 
   it('never spawns fruit on a snake', () => {
-    let m = createMatch(players(1), { width: 6, height: 6 }, 5);
+    let m = createMatch(players(1), { width: 6, height: 6, apples: 1 }, 5);
     for (let i = 0; i < 200 && m.status === 'running'; i++) {
       const occupied = new Set(m.snakes.flatMap((s) => s.body.map((c) => `${c.x},${c.y}`)));
       for (const f of m.fruits) expect(occupied.has(`${f.x},${f.y}`)).toBe(false);
@@ -318,5 +321,101 @@ describe('determinism', () => {
       return m;
     };
     expect(run()).toEqual(run());
+  });
+});
+
+describe('easy-mode settings', () => {
+  it('wraps around instead of dying when walls are off', () => {
+    let m = scenario([{ id: 'p0', body: [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }] }], [], { walls: false });
+    m = step(m);
+    expect(snake(m, 'p0').alive).toBe(true);
+    expect(snake(m, 'p0').body[0]).toEqual({ x: 0, y: 5 });
+    m = step(turn(m, 'p0', 'up'));
+    m = scenario([{ id: 'p0', body: [{ x: 4, y: 0 }, { x: 4, y: 1 }], dir: 'up' }], [], { walls: false });
+    expect(snake(step(m), 'p0').body[0]).toEqual({ x: 4, y: 19 });
+  });
+
+  it('can eat fruit on the far side after wrapping', () => {
+    const m = scenario([{ id: 'p0', body: [{ x: 0, y: 3 }, { x: 1, y: 3 }], dir: 'left' }], [{ x: 19, y: 3 }], { walls: false });
+    const next = step(m);
+    expect(snake(next, 'p0').score).toBe(1);
+  });
+
+  it('lets snakes pass through each other when collisions are off', () => {
+    const m = scenario(
+      [
+        { id: 'p0', body: [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }] },
+        { id: 'p1', body: [{ x: 7, y: 6 }, { x: 6, y: 6 }, { x: 6, y: 5 }, { x: 6, y: 4 }], dir: 'right' },
+      ],
+      [],
+      { snakeCollisions: false },
+    );
+    const next = step(m);
+    expect(snake(next, 'p0').alive).toBe(true);
+    expect(snake(next, 'p1').alive).toBe(true);
+  });
+
+  it('lets heads meet without dying when collisions are off', () => {
+    const m = scenario(
+      [
+        { id: 'p0', body: [{ x: 5, y: 5 }, { x: 4, y: 5 }], dir: 'right' },
+        { id: 'p1', body: [{ x: 7, y: 5 }, { x: 8, y: 5 }], dir: 'left' },
+      ],
+      [],
+      { snakeCollisions: false },
+    );
+    const next = step(m);
+    expect(next.snakes.every((s) => s.alive)).toBe(true);
+  });
+
+  it('still kills a snake that bites itself when collisions are off', () => {
+    const body = [{ x: 5, y: 5 }, { x: 5, y: 6 }, { x: 6, y: 6 }, { x: 6, y: 5 }, { x: 6, y: 4 }];
+    const m = scenario([{ id: 'p0', body, dir: 'up' }], [], { snakeCollisions: false, walls: false });
+    expect(snake(step(turn(m, 'p0', 'right')), 'p0').alive).toBe(false);
+  });
+
+  it('still kills on walls when only collisions are off', () => {
+    const m = scenario([{ id: 'p0', body: [{ x: 19, y: 5 }, { x: 18, y: 5 }] }], [], { snakeCollisions: false });
+    expect(snake(step(m), 'p0').alive).toBe(false);
+  });
+});
+
+describe('species', () => {
+  it('uses the species each player chose, defaulting to join order', () => {
+    const m = createMatch([{ id: 'a', name: 'A', species: 6 }, { id: 'b', name: 'B' }], {}, 1);
+    expect(m.snakes.map((s) => s.species)).toEqual([6, 1]);
+  });
+});
+
+describe('board size and apples', () => {
+  it('fits the board to the shape of the screen', () => {
+    expect(boardSizeFor(1)).toEqual({ width: 18, height: 18 });
+    expect(boardSizeFor(9 / 16)).toEqual({ width: 18, height: 32 });
+    expect(boardSizeFor(16 / 9)).toEqual({ width: 32, height: 18 });
+    expect(boardSizeFor(0.2)).toEqual({ width: 18, height: 34 });
+    expect(boardSizeFor(NaN)).toEqual({ width: 18, height: 18 });
+  });
+
+  it('plays on a tall board with corner starts inside it', () => {
+    let m = createMatch(players(4), { ...boardSizeFor(9 / 16) }, 2);
+    for (const s of m.snakes) for (const c of s.body) {
+      expect(c.x).toBeGreaterThanOrEqual(0); expect(c.x).toBeLessThan(18);
+      expect(c.y).toBeGreaterThanOrEqual(0); expect(c.y).toBeLessThan(32);
+    }
+    m = { ...m, fruits: [] };
+    for (let i = 0; i < 5; i++) m = step(m);
+    expect(m.snakes.every((s) => s.alive)).toBe(true);
+  });
+
+  it('cleans up settings from storage or the network', () => {
+    expect(sanitizeSettings(undefined)).toEqual({ walls: true, snakeCollisions: true, apples: 3 });
+    expect(sanitizeSettings({ apples: 50, walls: false })).toEqual({ walls: false, snakeCollisions: true, apples: 10 });
+    expect(sanitizeSettings({ apples: 0 } as never).apples).toBe(1);
+    expect(sanitizeSettings({ walls: 'no' } as never).walls).toBe(true);
+  });
+
+  it('keeps up to the chosen number of apples', () => {
+    expect(createMatch(players(1), { apples: 10 }, 1).fruits).toHaveLength(10);
+    expect(createMatch(players(4), { apples: 1 }, 1).fruits).toHaveLength(1);
   });
 });
