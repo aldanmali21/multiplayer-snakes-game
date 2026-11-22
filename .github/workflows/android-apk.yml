@@ -41,7 +41,9 @@ jobs:
       - name: Make the APK smaller
         # Native libraries are most of the app; store them compressed so the download is smaller.
         run: |
-          echo "expo.useLegacyPackaging=true" >> android/gradle.properties
+          # gradle.properties may not end in a newline, so start on a fresh line.
+          printf '\nexpo.useLegacyPackaging=true\n' >> android/gradle.properties
+          tail -3 android/gradle.properties
           grep -n "useLegacyPackaging" android/app/build.gradle
       - name: Build APK for modern phones (64-bit)
         working-directory: android
