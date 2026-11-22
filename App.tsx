@@ -7,12 +7,25 @@ import { defaultTheme } from './src/theme/theme';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { MatchScreen } from './src/screens/MatchScreen';
 import { ResultsScreen } from './src/screens/ResultsScreen';
+import { JoinScreen } from './src/screens/JoinScreen';
+import { ClientFlow, HostFlow } from './src/screens/Multiplayer';
 import { useLocalMatch } from './src/game/useLocalMatch';
+import { useDiscovery } from './src/net/hooks';
 
 const NAME_KEY = 'snakes.nickname';
 const theme = defaultTheme;
 
-type Route = { name: 'home' } | { name: 'solo' };
+type Route =
+  | { name: 'home' }
+  | { name: 'solo' }
+  | { name: 'host' }
+  | { name: 'browse' }
+  | { name: 'client'; address: string; code: string };
+
+function Browse({ onJoin, onBack }: { onJoin: (a: string, c: string) => void; onBack: () => void }) {
+  const rooms = useDiscovery();
+  return <JoinScreen theme={theme} rooms={rooms} onJoin={onJoin} onBack={onBack} />;
+}
 
 function SoloMatch({ name, onHome }: { name: string; onHome: () => void }) {
   const players = useMemo(() => [{ id: 'me', name }], [name]);
@@ -54,14 +67,20 @@ export default function App() {
       <StatusBar style="light" />
       {route.name === 'solo' ? (
         <SoloMatch name={name || 'Player'} onHome={home} />
+      ) : route.name === 'host' ? (
+        <HostFlow theme={theme} name={name || 'Host'} onExit={home} />
+      ) : route.name === 'browse' ? (
+        <Browse onBack={home} onJoin={(address, code) => setRoute({ name: 'client', address, code })} />
+      ) : route.name === 'client' ? (
+        <ClientFlow theme={theme} name={name || 'Player'} address={route.address} code={route.code} onExit={() => setRoute({ name: 'browse' })} />
       ) : (
         <HomeScreen
           theme={theme}
           name={name}
           onSaveName={saveName}
           onSolo={() => setRoute({ name: 'solo' })}
-          onHost={() => {}}
-          onJoin={() => {}}
+          onHost={() => setRoute({ name: 'host' })}
+          onJoin={() => setRoute({ name: 'browse' })}
         />
       )}
     </SafeAreaProvider>
