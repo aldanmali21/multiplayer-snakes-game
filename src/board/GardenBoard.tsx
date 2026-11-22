@@ -48,9 +48,11 @@ export function GardenBoard({ state, cell, frame }: Props) {
     let raf = 0;
     let last = 0;
     let cost = 8; // smoothed ms to build one frame
+    let ctx: Ctx2D | null = null;
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      const fps = cost < 9 ? 60 : 30;
+      // 60 fps while snakes move and the phone keeps up; 30 otherwise (countdown, paused, slow phone).
+      const fps = stateRef.current.status === 'running' && cost < 9 ? 60 : 30;
       if (now - last < 1000 / fps - 2) return;
       last = now;
       const began = Date.now();
@@ -59,7 +61,9 @@ export function GardenBoard({ state, cell, frame }: Props) {
       const span = Math.max(s.config.tickMs, Math.min(tr.gap || s.config.tickMs, s.config.tickMs * 1.6));
       const frac = s.status === 'running' ? Math.min(1, (Date.now() - tr.at) / span) : 1;
       const pic = createPicture((canvas) => {
-        drawGardenBoard(new Ctx2D(Skia, canvas), tex, {
+        if (ctx) ctx.canvas = canvas;
+        else ctx = new Ctx2D(Skia, canvas);
+        drawGardenBoard(ctx, tex, {
           cell,
           frame,
           cols,
