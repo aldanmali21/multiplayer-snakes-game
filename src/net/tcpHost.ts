@@ -1,15 +1,9 @@
 import TcpSocket from 'react-native-tcp-socket';
 import { createUdp } from './udp';
-import { HostCore, type Conn, type HostSnapshot } from './hostCore';
-import {
-  DISCOVERY_PORT,
-  GAME_PORT,
-  LineBuffer,
-  encode,
-  randomCode,
-  type Beacon,
-  type ClientMsg,
-} from './protocol';
+import { HostCore, type HostSnapshot } from './hostCore';
+import { attachSocket } from './hostWire';
+import type { SocketLike } from './clientCore';
+import { DISCOVERY_PORT, GAME_PORT, encode, randomCode, type Beacon } from './protocol';
 import { broadcastTargets, getLocalIp } from './lan';
 
 export type RunningHost = {
@@ -17,9 +11,6 @@ export type RunningHost = {
   ip: string | null;
   stop: () => void;
 };
-
-const isClientMsg = (m: unknown): m is ClientMsg =>
-  typeof m === 'object' && m !== null && typeof (m as { t?: unknown }).t === 'string';
 
 /** Opens the TCP port, advertises the room over UDP and wires sockets into a HostCore. */
 export async function startHost(
@@ -30,28 +21,7 @@ export async function startHost(
   const ip = await getLocalIp();
   const core = new HostCore({ hostName, code: randomCode(), onUpdate });
 
-  const server = TcpSocket.createServer((socket) => {
-    socket.setEncoding('utf8');
-    socket.setNoDelay(true);
-    const lines = new LineBuffer();
-    const conn: Conn = {
-      send: (msg) => {
-        try {
-          socket.write(encode(msg));
-        } catch {
-          // The close event will clean up.
-        }
-      },
-      close: () => socket.destroy(),
-    };
-    socket.on('data', (data) => {
-      for (const msg of lines.push(typeof data === 'string' ? data : data.toString('utf8'))) {
-        if (isClientMsg(msg)) core.handle(conn, msg);
-      }
-    });
-    socket.on('error', () => {});
-    socket.on('close', () => core.disconnected(conn));
-  });
+  const server = TcpSocket.createServer((socket) => attachSocket(core, socket as unknown as SocketLike));
   server.on('error', (e) => onError(`Could not open the room: ${e.message}`));
   server.listen({ port: GAME_PORT, host: '0.0.0.0', reuseAddress: true });
 

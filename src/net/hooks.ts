@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { HostSnapshot } from './hostCore';
 import { startHost, type RunningHost } from './tcpHost';
-import { RoomClient, discoverRooms, type ClientSnapshot, type FoundRoom } from './client';
+import { RoomClient, discoverRooms, tcpConnect, type ClientSnapshot, type FoundRoom } from './client';
 
 export function useHost(name: string) {
   const [snap, setSnap] = useState<HostSnapshot | null>(null);
@@ -35,7 +35,7 @@ export function useClient(address: string, code: string, name: string) {
   const idRef = useRef(`p${Math.random().toString(36).slice(2, 10)}`);
 
   useEffect(() => {
-    const c = new RoomClient({ host: address, code, name, id: idRef.current, onUpdate: setSnap });
+    const c = new RoomClient({ host: address, code, name, id: idRef.current, onUpdate: setSnap, connect: tcpConnect });
     clientRef.current = c;
     c.connect();
     return () => c.leave();

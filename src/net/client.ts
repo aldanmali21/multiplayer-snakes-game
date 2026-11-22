@@ -1,131 +1,13 @@
 import TcpSocket from 'react-native-tcp-socket';
 import { createUdp } from './udp';
-import type { Dir } from '../game/rules';
-import type { MatchView } from '../game/useLocalMatch';
-import {
-  DISCOVERY_PORT,
-  GAME_PORT,
-  LineBuffer,
-  REJOIN_GRACE_MS,
-  encode,
-  type Beacon,
-  type Phase,
-  type RejectReason,
-  type RoomPlayer,
-  type ServerMsg,
-} from './protocol';
+import { DISCOVERY_PORT, type Beacon } from './protocol';
+import type { Connect } from './clientCore';
 
-export type ClientStatus = 'connecting' | 'joined' | 'reconnecting' | 'rejected' | 'closed' | 'failed';
+export { RoomClient, type ClientSnapshot, type ClientStatus } from './clientCore';
 
-export type ClientSnapshot = {
-  status: ClientStatus;
-  reason?: RejectReason;
-  room: { code: string; phase: Phase; players: RoomPlayer[] } | null;
-  view: MatchView | null;
-};
-
-type Options = {
-  host: string;
-  code: string;
-  name: string;
-  /** Stable for this app session so a dropped phone can reclaim its snake. */
-  id: string;
-  onUpdate: (s: ClientSnapshot) => void;
-};
-
-type Socket = ReturnType<typeof TcpSocket.createConnection>;
-
-export class RoomClient {
-  private snap: ClientSnapshot = { status: 'connecting', room: null, view: null };
-  private socket?: Socket;
-  private stopped = false;
-  private retryUntil = 0;
-  private retryTimer?: ReturnType<typeof setTimeout>;
-
-  constructor(private o: Options) {}
-
-  connect() {
-    this.open();
-  }
-
-  turn(dir: Dir) {
-    this.send({ t: 'turn', dir });
-  }
-
-  leave() {
-    this.stopped = true;
-    if (this.retryTimer) clearTimeout(this.retryTimer);
-    this.send({ t: 'leave' });
-    setTimeout(() => this.socket?.destroy(), 100);
-  }
-
-  private send(msg: { t: 'turn'; dir: Dir } | { t: 'leave' }) {
-    try {
-      this.socket?.write(encode(msg));
-    } catch {
-      // closing; reconnect logic handles it
-    }
-  }
-
-  private update(patch: Partial<ClientSnapshot>) {
-    this.snap = { ...this.snap, ...patch };
-    this.o.onUpdate(this.snap);
-  }
-
-  private open() {
-    const lines = new LineBuffer();
-    let welcomed = false;
-    const socket = TcpSocket.createConnection({ host: this.o.host, port: GAME_PORT, connectTimeout: 5000 }, () => {
-      socket.setNoDelay(true);
-      socket.write(encode({ t: 'hello', id: this.o.id, name: this.o.name, code: this.o.code }));
-    });
-    this.socket = socket;
-    socket.setEncoding('utf8');
-    socket.on('data', (data) => {
-      for (const raw of lines.push(typeof data === 'string' ? data : data.toString('utf8'))) {
-        const msg = raw as ServerMsg;
-        if (msg.t === 'welcome') {
-          welcomed = true;
-          this.retryUntil = 0;
-          this.update({ status: 'joined' });
-        } else this.onMessage(msg);
-      }
-    });
-    socket.on('error', () => {});
-    socket.on('close', () => {
-      if (this.stopped || this.socket !== socket) return;
-      if (this.snap.status === 'rejected' || this.snap.status === 'closed') return;
-      const inMatch = this.snap.room?.phase === 'countdown' || this.snap.room?.phase === 'running';
-      if (welcomed && inMatch) {
-        if (!this.retryUntil) this.retryUntil = Date.now() + REJOIN_GRACE_MS;
-      }
-      if (this.retryUntil && Date.now() < this.retryUntil) {
-        this.update({ status: 'reconnecting' });
-        this.retryTimer = setTimeout(() => this.open(), 1000);
-      } else {
-        this.update({ status: welcomed ? 'closed' : 'failed' });
-      }
-    });
-  }
-
-  private onMessage(msg: ServerMsg) {
-    switch (msg.t) {
-      case 'reject':
-        this.update({ status: 'rejected', reason: msg.reason });
-        break;
-      case 'room':
-        this.update({ room: { code: msg.code, phase: msg.phase, players: msg.players } });
-        break;
-      case 'tick':
-        this.update({ view: { state: msg.state, countdown: msg.countdown } });
-        break;
-      case 'closed':
-        this.stopped = true;
-        this.update({ status: 'closed' });
-        break;
-    }
-  }
-}
+/** Real TCP connection on the phone. */
+export const tcpConnect: Connect = (host, port, onConnect) =>
+  TcpSocket.createConnection({ host, port, connectTimeout: 5000 }, onConnect);
 
 export type FoundRoom = { address: string; code: string; hostName: string; players: number; open: boolean; seen: number };
 
