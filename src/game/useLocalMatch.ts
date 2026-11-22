@@ -3,7 +3,8 @@ import { createMatch, step, turn, type Dir, type MatchState, type PlayerInfo } f
 
 export const COUNTDOWN_SECONDS = 3;
 
-export type MatchView = { state: MatchState; countdown: number };
+/** What a screen needs to draw a match. `pausedBy` is set while the match is paused. */
+export type MatchView = { state: MatchState; countdown: number; pausedBy?: string };
 
 /** Runs a whole match on this phone (single player). `runId` restarts it. */
 export function useLocalMatch(players: PlayerInfo[], runId: number) {

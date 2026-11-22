@@ -1,4 +1,4 @@
-import type { Dir, MatchState } from '../game/rules';
+import type { Dir, MatchSettings, MatchState } from '../game/rules';
 
 /** TCP port the Host listens on, and UDP port used to announce rooms. */
 export const GAME_PORT = 47474;
@@ -6,13 +6,19 @@ export const DISCOVERY_PORT = 47475;
 export const MAX_ROOM_PLAYERS = 4;
 export const REJOIN_GRACE_MS = 10_000;
 
-export type Phase = 'lobby' | 'countdown' | 'running' | 'over';
+export type Phase = 'lobby' | 'countdown' | 'running' | 'paused' | 'over';
 
-export type RoomPlayer = { id: string; name: string; connected: boolean; isHost: boolean };
+/** Phases in which a match is on screen. */
+export const inMatch = (p: Phase | undefined) => p === 'countdown' || p === 'running' || p === 'paused';
+
+export type RoomPlayer = { id: string; name: string; connected: boolean; isHost: boolean; species: number };
 
 export type ClientMsg =
-  | { t: 'hello'; id: string; name: string; code: string }
+  | { t: 'hello'; id: string; name: string; code: string; species?: number }
   | { t: 'turn'; dir: Dir }
+  | { t: 'pick'; species: number }
+  | { t: 'pause' }
+  | { t: 'resume' }
   | { t: 'leave' };
 
 export type RejectReason = 'full' | 'in-progress' | 'bad-code';
@@ -20,8 +26,8 @@ export type RejectReason = 'full' | 'in-progress' | 'bad-code';
 export type ServerMsg =
   | { t: 'welcome'; id: string }
   | { t: 'reject'; reason: RejectReason }
-  | { t: 'room'; code: string; phase: Phase; players: RoomPlayer[] }
-  | { t: 'tick'; countdown: number; state: MatchState }
+  | { t: 'room'; code: string; phase: Phase; players: RoomPlayer[]; settings: MatchSettings }
+  | { t: 'tick'; countdown: number; state: MatchState; pausedBy?: string }
   | { t: 'closed' };
 
 /** UDP announcement the Host broadcasts so nearby phones can list rooms. */

@@ -1,10 +1,12 @@
-import type { Dir } from '../game/rules';
+import type { Dir, MatchSettings } from '../game/rules';
 import type { MatchView } from '../game/useLocalMatch';
 import {
   GAME_PORT,
   LineBuffer,
   REJOIN_GRACE_MS,
   encode,
+  inMatch,
+  type ClientMsg,
   type Phase,
   type RejectReason,
   type RoomPlayer,
@@ -16,7 +18,7 @@ export type ClientStatus = 'connecting' | 'joined' | 'reconnecting' | 'rejected'
 export type ClientSnapshot = {
   status: ClientStatus;
   reason?: RejectReason;
-  room: { code: string; phase: Phase; players: RoomPlayer[] } | null;
+  room: { code: string; phase: Phase; players: RoomPlayer[]; settings: MatchSettings } | null;
   view: MatchView | null;
 };
 
@@ -26,6 +28,8 @@ type Options = {
   name: string;
   /** Stable for this app session so a dropped phone can reclaim its snake. */
   id: string;
+  /** Favourite snake; the Host gives a free one if it's taken. */
+  species?: number;
   onUpdate: (s: ClientSnapshot) => void;
   connect: Connect;
   port?: number;
@@ -61,6 +65,18 @@ export class RoomClient {
     this.send({ t: 'turn', dir });
   }
 
+  pick(species: number) {
+    this.send({ t: 'pick', species });
+  }
+
+  pause() {
+    this.send({ t: 'pause' });
+  }
+
+  resume() {
+    this.send({ t: 'resume' });
+  }
+
   leave() {
     this.stopped = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -68,7 +84,7 @@ export class RoomClient {
     setTimeout(() => this.socket?.destroy(), 100);
   }
 
-  private send(msg: { t: 'turn'; dir: Dir } | { t: 'leave' }) {
+  private send(msg: ClientMsg) {
     try {
       this.socket?.write(encode(msg));
     } catch {
@@ -86,7 +102,7 @@ export class RoomClient {
     let welcomed = false;
     const socket = this.o.connect(this.o.host, this.o.port ?? GAME_PORT, () => {
       socket.setNoDelay(true);
-      socket.write(encode({ t: 'hello', id: this.o.id, name: this.o.name, code: this.o.code }));
+      socket.write(encode({ t: 'hello', id: this.o.id, name: this.o.name, code: this.o.code, species: this.o.species }));
     });
     this.socket = socket;
     socket.setEncoding('utf8');
@@ -104,8 +120,7 @@ export class RoomClient {
     socket.on('close', () => {
       if (this.stopped || this.socket !== socket) return;
       if (this.snap.status === 'rejected' || this.snap.status === 'closed') return;
-      const inMatch = this.snap.room?.phase === 'countdown' || this.snap.room?.phase === 'running';
-      if (welcomed && inMatch) {
+      if (welcomed && inMatch(this.snap.room?.phase)) {
         if (!this.retryUntil) this.retryUntil = Date.now() + REJOIN_GRACE_MS;
       }
       if (this.retryUntil && Date.now() < this.retryUntil) {
@@ -123,10 +138,10 @@ export class RoomClient {
         this.update({ status: 'rejected', reason: msg.reason });
         break;
       case 'room':
-        this.update({ room: { code: msg.code, phase: msg.phase, players: msg.players } });
+        this.update({ room: { code: msg.code, phase: msg.phase, players: msg.players, settings: msg.settings } });
         break;
       case 'tick':
-        this.update({ view: { state: msg.state, countdown: msg.countdown } });
+        this.update({ view: { state: msg.state, countdown: msg.countdown, pausedBy: msg.pausedBy } });
         break;
       case 'closed':
         this.stopped = true;

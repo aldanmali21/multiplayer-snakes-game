@@ -1,15 +1,19 @@
 import {
+  DEFAULT_SETTINGS,
+  SPECIES_COUNT,
   createMatch,
   eliminate,
   step,
   turn as applyTurn,
   type Dir,
+  type MatchSettings,
   type MatchState,
 } from '../game/rules';
 import { COUNTDOWN_SECONDS, type MatchView } from '../game/useLocalMatch';
 import {
   MAX_ROOM_PLAYERS,
   REJOIN_GRACE_MS,
+  inMatch,
   normaliseCode,
   type ClientMsg,
   type Phase,
@@ -25,6 +29,7 @@ export const HOST_ID = 'host';
 type Member = {
   id: string;
   name: string;
+  species: number;
   conn: Conn | null;
   dropTimer?: ReturnType<typeof setTimeout>;
 };
@@ -33,6 +38,7 @@ export type HostSnapshot = {
   code: string;
   phase: Phase;
   players: RoomPlayer[];
+  settings: MatchSettings;
   view: MatchView | null;
 };
 
@@ -41,7 +47,11 @@ type Options = {
   code: string;
   onUpdate: (snapshot: HostSnapshot) => void;
   seed?: number;
+  hostSpecies?: number;
+  settings?: MatchSettings;
 };
+
+const validSpecies = (s: unknown): s is number => Number.isInteger(s) && (s as number) >= 0 && (s as number) < SPECIES_COUNT;
 
 /**
  * The Host's brain: owns the Room, runs the Match and tells everyone what happened.
@@ -52,11 +62,14 @@ export class HostCore {
   private phase: Phase = 'lobby';
   private match: MatchState | null = null;
   private countdown = 0;
+  private pausedBy: string | undefined;
+  private settings: MatchSettings;
   private timer?: ReturnType<typeof setInterval>;
   private closed = false;
 
   constructor(private opts: Options) {
-    this.members = [{ id: HOST_ID, name: opts.hostName, conn: null }];
+    this.settings = { ...DEFAULT_SETTINGS, ...opts.settings };
+    this.members = [{ id: HOST_ID, name: opts.hostName, conn: null, species: validSpecies(opts.hostSpecies) ? opts.hostSpecies : 0 }];
     this.publish();
   }
 
@@ -64,7 +77,7 @@ export class HostCore {
     return this.opts.code;
   }
 
-  /** How many seats are taken, and whether new people may still join. */
+  /** Whether new people may still join. */
   get open() {
     return this.phase === 'lobby' && this.members.length < MAX_ROOM_PLAYERS;
   }
@@ -78,7 +91,8 @@ export class HostCore {
       code: this.opts.code,
       phase: this.phase,
       players: this.roomPlayers(),
-      view: this.match ? { state: this.match, countdown: this.countdown } : null,
+      settings: this.settings,
+      view: this.match ? { state: this.match, countdown: this.countdown, pausedBy: this.pausedBy } : null,
     };
   }
 
@@ -86,20 +100,23 @@ export class HostCore {
 
   handle(conn: Conn, msg: ClientMsg) {
     if (this.closed) return;
+    if (msg.t === 'hello') return this.hello(conn, msg);
+    const m = this.memberOf(conn);
+    if (msg.t === 'leave') {
+      if (m) this.remove(m, true);
+      conn.close();
+      return;
+    }
+    if (!m) return;
     switch (msg.t) {
-      case 'hello':
-        return this.hello(conn, msg);
-      case 'turn': {
-        const m = this.memberOf(conn);
-        if (m) this.turn(m.id, msg.dir);
-        return;
-      }
-      case 'leave': {
-        const m = this.memberOf(conn);
-        if (m) this.remove(m, true);
-        conn.close();
-        return;
-      }
+      case 'turn':
+        return this.turn(m.id, msg.dir);
+      case 'pick':
+        return void this.pick(m.id, msg.species);
+      case 'pause':
+        return this.pause(m.id);
+      case 'resume':
+        return this.resume(m.id);
     }
   }
 
@@ -107,7 +124,7 @@ export class HostCore {
     if (this.closed) return;
     const m = this.memberOf(conn);
     if (!m) return;
-    if (this.phase === 'lobby' || this.phase === 'over') {
+    if (!inMatch(this.phase)) {
       this.remove(m, false);
       return;
     }
@@ -122,23 +139,61 @@ export class HostCore {
     this.publish();
   }
 
-  // ---- actions from the Host's own screen ----------------------------------
+  // ---- actions (from the Host's own screen, or relayed from phones) ----------
 
   turn(id: string, dir: Dir) {
-    if (!this.match) return;
+    if (!this.match || this.phase !== 'running') return;
     this.match = applyTurn(this.match, id, dir);
+  }
+
+  /** Choose a snake. Returns false if someone else already has it. */
+  pick(id: string, species: number): boolean {
+    if (this.phase !== 'lobby' && this.phase !== 'over') return false;
+    const m = this.members.find((x) => x.id === id);
+    if (!m || !validSpecies(species)) return false;
+    if (this.members.some((x) => x !== m && x.species === species)) return false;
+    m.species = species;
+    this.broadcastRoom();
+    this.publish();
+    return true;
+  }
+
+  /** Only the Host changes the rules, and only between matches. */
+  setSettings(settings: Partial<MatchSettings>) {
+    if (this.phase !== 'lobby' && this.phase !== 'over') return;
+    this.settings = { ...this.settings, ...settings };
+    this.broadcastRoom();
+    this.publish();
   }
 
   start() {
     if (this.phase !== 'lobby' || this.closed) return;
-    const players = this.members.map((m) => ({ id: m.id, name: m.name }));
-    this.match = createMatch(players, {}, this.opts.seed);
-    this.phase = 'countdown';
-    this.countdown = COUNTDOWN_SECONDS;
+    const players = this.members.map((m) => ({ id: m.id, name: m.name, species: m.species }));
+    this.match = createMatch(players, this.settings, this.opts.seed);
+    this.pausedBy = undefined;
+    this.beginCountdown();
+  }
+
+  /** Anyone in the match can pause it for everyone. */
+  pause(id: string) {
+    if (this.phase !== 'running' && this.phase !== 'countdown') return;
+    const m = this.members.find((x) => x.id === id);
+    if (!m) return;
+    this.stopTimer();
+    this.phase = 'paused';
+    this.countdown = 0;
+    this.pausedBy = m.name;
     this.broadcastRoom();
     this.broadcastTick();
     this.publish();
-    this.timer = setInterval(() => this.countdownTick(), 1000);
+  }
+
+  /** Anyone can resume; play restarts after a short countdown. */
+  resume(id: string) {
+    if (this.phase !== 'paused') return;
+    if (!this.members.some((x) => x.id === id)) return;
+    this.pausedBy = undefined;
+    this.beginCountdown();
   }
 
   /** Return everyone to the lobby after a match. */
@@ -180,7 +235,7 @@ export class HostCore {
       if (old && old !== conn) old.close();
       conn.send({ t: 'welcome', id: existing.id });
       this.broadcastRoom();
-      if (this.match) conn.send({ t: 'tick', countdown: this.countdown, state: this.match });
+      if (this.match) conn.send(this.tickMsg());
       this.publish();
       return;
     }
@@ -194,11 +249,19 @@ export class HostCore {
       conn.close();
       return;
     }
-    const name = this.uniqueName(msg.name.trim().slice(0, 12) || 'Player');
-    this.members.push({ id: msg.id, name, conn });
+    const name = this.uniqueName(String(msg.name ?? '').trim().slice(0, 12) || 'Player');
+    this.members.push({ id: msg.id, name, conn, species: this.freeSpecies(msg.species) });
     conn.send({ t: 'welcome', id: msg.id });
     this.broadcastRoom();
     this.publish();
+  }
+
+  /** The player's favourite snake if nobody has it, otherwise the first free one. */
+  private freeSpecies(preferred: unknown): number {
+    const taken = new Set(this.members.map((m) => m.species));
+    if (validSpecies(preferred) && !taken.has(preferred)) return preferred;
+    for (let s = 0; s < SPECIES_COUNT; s++) if (!taken.has(s)) return s;
+    return 0;
   }
 
   private uniqueName(base: string) {
@@ -212,8 +275,7 @@ export class HostCore {
 
   private remove(m: Member, killSnake: boolean) {
     if (m.dropTimer) clearTimeout(m.dropTimer);
-    const inMatch = this.phase === 'countdown' || this.phase === 'running';
-    if (inMatch && killSnake && this.match) {
+    if (inMatch(this.phase) && killSnake && this.match) {
       // The snake must stay in the match record (it is a result), so only mark it dead.
       this.match = eliminate(this.match, m.id);
       m.conn = null;
@@ -222,7 +284,7 @@ export class HostCore {
         this.broadcastTick();
         this.broadcastRoom();
       }
-    } else if (!inMatch && this.phase !== 'over') {
+    } else if (this.phase === 'lobby') {
       this.members = this.members.filter((x) => x !== m);
       this.broadcastRoom();
     } else {
@@ -230,6 +292,16 @@ export class HostCore {
       this.broadcastRoom();
     }
     this.publish();
+  }
+
+  private beginCountdown() {
+    this.stopTimer();
+    this.phase = 'countdown';
+    this.countdown = COUNTDOWN_SECONDS;
+    this.broadcastRoom();
+    this.broadcastTick();
+    this.publish();
+    this.timer = setInterval(() => this.countdownTick(), 1000);
   }
 
   private countdownTick() {
@@ -259,6 +331,7 @@ export class HostCore {
   private finish() {
     this.stopTimer();
     this.phase = 'over';
+    this.pausedBy = undefined;
     this.broadcastTick();
     this.broadcastRoom();
     this.publish();
@@ -277,6 +350,7 @@ export class HostCore {
     return this.members.map((m) => ({
       id: m.id,
       name: m.name,
+      species: m.species,
       isHost: m.id === HOST_ID,
       connected: m.id === HOST_ID || m.conn !== null,
     }));
@@ -287,11 +361,15 @@ export class HostCore {
   }
 
   private broadcastRoom() {
-    this.broadcast({ t: 'room', code: this.opts.code, phase: this.phase, players: this.roomPlayers() });
+    this.broadcast({ t: 'room', code: this.opts.code, phase: this.phase, players: this.roomPlayers(), settings: this.settings });
+  }
+
+  private tickMsg(): ServerMsg {
+    return { t: 'tick', countdown: this.countdown, state: this.match!, pausedBy: this.pausedBy };
   }
 
   private broadcastTick() {
-    if (this.match) this.broadcast({ t: 'tick', countdown: this.countdown, state: this.match });
+    if (this.match) this.broadcast(this.tickMsg());
   }
 
   private publish() {

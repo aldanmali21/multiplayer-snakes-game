@@ -266,6 +266,10 @@ export const SPECIES = [
   { name: 'Corn snake', base: '#ec7a35', dark: '#5a200b', light: '#ffd0a0', pat: 'corn' },
   { name: 'Blue racer', base: '#3d7be0', dark: '#0f2250', light: '#bcd6ff', pat: 'racer' },
   { name: 'Milk snake', base: '#d9333c', dark: '#2a0a0c', light: '#ffb3a8', pat: 'milk' },
+  { name: 'Rattlesnake', base: '#b58d5c', dark: '#3b2814', light: '#ecd6ad', pat: 'diamond' },
+  { name: 'Albino python', base: '#f1e7cf', dark: '#8a6d3b', light: '#ffffff', pat: 'albino' },
+  { name: 'Black mamba', base: '#61666b', dark: '#16181a', light: '#b4b9be', pat: 'plain' },
+  { name: 'Garter snake', base: '#2f3d2a', dark: '#0e140c', light: '#93a67c', pat: 'garter' },
 ] as const;
 
 function chaikin(p: Pt[], n: number): Pt[] {
@@ -326,19 +330,13 @@ export function snake(ctx: Ctx2D, pts: Pt[], species: number, c: number, time: n
   union((i) => { const [x, y] = P(i); return [x + c * 0.08, y + c * 0.13, rad(i) * 0.95]; }, 'rgba(8,30,4,.22)');
   union((i) => { const [x, y] = P(i); return [x, y, rad(i) + c * 0.025]; }, sp.dark);
   if (sp.pat === 'milk') {
-    // banded: group circles by band colour so it's a handful of paths, not hundreds
-    const bands: Record<string, number[]> = {};
+    // banded: paint each disc tail to head so every band keeps its width
     for (let i = n - 1; i >= 0; i--) {
       const m = i % 18;
       const col = m < 9 ? sp.base : m < 11 ? '#1a1a1a' : m < 14 ? '#f1e3c0' : m < 16 ? '#1a1a1a' : sp.base;
-      (bands[col] ??= []).push(i);
-    }
-    // draw tail-to-head order matters little for flat bands; keep head on top by painting base last
-    for (const [col, idx] of Object.entries(bands)) {
-      ctx.beginPath();
-      for (const i of idx) { const [x, y] = P(i); ctx.moveTo(x + rad(i) * 0.9, y); ctx.arc(x, y, rad(i) * 0.9, 0, 7); }
+      const [x, y] = P(i);
       ctx.fillStyle = col;
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, rad(i) * 0.9, 0, 7); ctx.fill();
     }
   } else {
     union((i) => { const [x, y] = P(i); return [x, y, rad(i) * 0.9]; }, sp.base);
@@ -360,11 +358,52 @@ export function snake(ctx: Ctx2D, pts: Pt[], species: number, c: number, time: n
       ctx.beginPath(); ctx.ellipse(0, 0, r * 0.42, r * 0.7, 0); ctx.fill(); ctx.stroke();
       ctx.restore();
     }
+    if (sp.pat === 'diamond' && i % 10 === 0) {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+      ctx.fillStyle = '#f3e3c0';
+      ctx.beginPath(); ctx.moveTo(-r * 1.0, 0); ctx.lineTo(0, -r * 0.82); ctx.lineTo(r * 1.0, 0); ctx.lineTo(0, r * 0.82); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#4a2f17';
+      ctx.beginPath(); ctx.moveTo(-r * 0.8, 0); ctx.lineTo(0, -r * 0.64); ctx.lineTo(r * 0.8, 0); ctx.lineTo(0, r * 0.64); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#7a5530';
+      ctx.beginPath(); ctx.moveTo(-r * 0.45, 0); ctx.lineTo(0, -r * 0.34); ctx.lineTo(r * 0.45, 0); ctx.lineTo(0, r * 0.34); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    if (sp.pat === 'albino' && i % 8 === 0) {
+      const h = ((i * 7919 + 104729) % 1000) / 1000;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a + (h - 0.5) * 0.8);
+      ctx.fillStyle = 'rgba(242,190,60,.85)';
+      ctx.beginPath(); ctx.ellipse((h - 0.5) * r * 0.5, 0, r * (0.35 + h * 0.2), r * 0.55, 0); ctx.fill();
+      ctx.restore();
+    }
     if (sp.pat === 'racer' && i % 5 === 0) {
       const h = ((i * 9301 + 49297) % 233280) / 233280;
       ctx.fillStyle = 'rgba(10,25,70,.35)';
       ctx.beginPath(); ctx.arc(x + Math.cos(a + 1.57) * (h - 0.5) * r, y + Math.sin(a + 1.57) * (h - 0.5) * r, r * 0.09, 0, 7); ctx.fill();
     }
+  }
+  if (sp.pat === 'garter') {
+    ctx.lineCap = 'round';
+    for (const [off, w, col] of [[0, 0.09, '#f2d35b'], [-0.58, 0.05, 'rgba(225,205,110,.75)'], [0.58, 0.05, 'rgba(225,205,110,.75)']] as const) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = Math.max(0.8, c * w);
+      ctx.beginPath();
+      for (let i = 3; i < n - 1; i++) {
+        const [x, y] = P(i), a = ang(i), r = rad(i);
+        const px = x + Math.cos(a + 1.57) * off * r, py = y + Math.sin(a + 1.57) * off * r;
+        if (i > 3) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.stroke();
+    }
+  }
+  if (sp.pat === 'diamond' && n > 6) {
+    // rattle on the tail tip
+    const [tx, ty] = P(n - 1), ta = ang(n - 1);
+    ctx.save(); ctx.translate(tx, ty); ctx.rotate(ta);
+    for (let k = 0; k < 3; k++) {
+      ctx.fillStyle = k % 2 ? '#d8c39a' : '#b9a173';
+      ctx.beginPath(); ctx.ellipse(-c * (0.08 + k * 0.1), 0, c * 0.07, c * 0.11 - k * c * 0.015, 0); ctx.fill();
+    }
+    ctx.restore();
   }
   union((i) => { const [x, y] = P(i); return [x - rad(i) * 0.18, y - rad(i) * 0.24, rad(i) * 0.52]; }, 'rgba(255,255,255,.17)');
 
@@ -432,6 +471,14 @@ export function snake(ctx: Ctx2D, pts: Pt[], species: number, c: number, time: n
     ctx.fillStyle = '#f1e3c0'; ctx.fillRect(r * 0.7, -r, r, r * 2);
     ctx.fillStyle = '#d9333c'; ctx.fillRect(r * 0.95, -r, r, r * 2);
     ctx.restore();
+  }
+  if (sp.pat === 'diamond') {
+    ctx.strokeStyle = 'rgba(60,35,15,.7)'; ctx.lineWidth = c * 0.05; ctx.lineCap = 'round';
+    for (const k of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 0.75, k * r * 0.3); ctx.lineTo(-r * 0.3, k * r * 0.62); ctx.stroke(); }
+  }
+  if (sp.pat === 'garter') {
+    ctx.fillStyle = '#f2d35b';
+    ctx.beginPath(); ctx.ellipse(-r * 0.55, 0, r * 0.18, r * 0.08, 0); ctx.fill();
   }
   if (sp.pat === 'corn') {
     ctx.fillStyle = '#b23516';
@@ -527,4 +574,11 @@ function roundRect(ctx: Ctx2D, x: number, y: number, w: number, h: number, r: nu
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+/** A short S-curve, for showing a species on the snake picker. Coordinates are in cells. */
+export function previewPoints(): Pt[] {
+  const pts: Pt[] = [];
+  for (let i = 0; i < 7; i++) pts.push([4.5 - i * 0.62, 1.5 + Math.sin(i * 0.9) * 0.55]);
+  return pts;
 }

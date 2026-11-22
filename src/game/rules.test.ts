@@ -320,3 +320,66 @@ describe('determinism', () => {
     expect(run()).toEqual(run());
   });
 });
+
+describe('easy-mode settings', () => {
+  it('wraps around instead of dying when walls are off', () => {
+    let m = scenario([{ id: 'p0', body: [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }] }], [], { walls: false });
+    m = step(m);
+    expect(snake(m, 'p0').alive).toBe(true);
+    expect(snake(m, 'p0').body[0]).toEqual({ x: 0, y: 5 });
+    m = step(turn(m, 'p0', 'up'));
+    m = scenario([{ id: 'p0', body: [{ x: 4, y: 0 }, { x: 4, y: 1 }], dir: 'up' }], [], { walls: false });
+    expect(snake(step(m), 'p0').body[0]).toEqual({ x: 4, y: 19 });
+  });
+
+  it('can eat fruit on the far side after wrapping', () => {
+    const m = scenario([{ id: 'p0', body: [{ x: 0, y: 3 }, { x: 1, y: 3 }], dir: 'left' }], [{ x: 19, y: 3 }], { walls: false });
+    const next = step(m);
+    expect(snake(next, 'p0').score).toBe(1);
+  });
+
+  it('lets snakes pass through each other when collisions are off', () => {
+    const m = scenario(
+      [
+        { id: 'p0', body: [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }] },
+        { id: 'p1', body: [{ x: 7, y: 6 }, { x: 6, y: 6 }, { x: 6, y: 5 }, { x: 6, y: 4 }], dir: 'right' },
+      ],
+      [],
+      { snakeCollisions: false },
+    );
+    const next = step(m);
+    expect(snake(next, 'p0').alive).toBe(true);
+    expect(snake(next, 'p1').alive).toBe(true);
+  });
+
+  it('lets heads meet without dying when collisions are off', () => {
+    const m = scenario(
+      [
+        { id: 'p0', body: [{ x: 5, y: 5 }, { x: 4, y: 5 }], dir: 'right' },
+        { id: 'p1', body: [{ x: 7, y: 5 }, { x: 8, y: 5 }], dir: 'left' },
+      ],
+      [],
+      { snakeCollisions: false },
+    );
+    const next = step(m);
+    expect(next.snakes.every((s) => s.alive)).toBe(true);
+  });
+
+  it('still kills a snake that bites itself when collisions are off', () => {
+    const body = [{ x: 5, y: 5 }, { x: 5, y: 6 }, { x: 6, y: 6 }, { x: 6, y: 5 }, { x: 6, y: 4 }];
+    const m = scenario([{ id: 'p0', body, dir: 'up' }], [], { snakeCollisions: false, walls: false });
+    expect(snake(step(turn(m, 'p0', 'right')), 'p0').alive).toBe(false);
+  });
+
+  it('still kills on walls when only collisions are off', () => {
+    const m = scenario([{ id: 'p0', body: [{ x: 19, y: 5 }, { x: 18, y: 5 }] }], [], { snakeCollisions: false });
+    expect(snake(step(m), 'p0').alive).toBe(false);
+  });
+});
+
+describe('species', () => {
+  it('uses the species each player chose, defaulting to join order', () => {
+    const m = createMatch([{ id: 'a', name: 'A', species: 6 }, { id: 'b', name: 'B' }], {}, 1);
+    expect(m.snakes.map((s) => s.species)).toEqual([6, 1]);
+  });
+});
