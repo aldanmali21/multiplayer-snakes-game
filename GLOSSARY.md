@@ -40,6 +40,10 @@ _Avoid_: Game, round, session
 A lobby, joined with a short code, where 1 to 4 Players gather before a Match starts.
 _Avoid_: Lobby, party
 
+**Host**:
+The Player whose phone creates the Room and runs the Match that the other phones join.
+_Avoid_: Server, admin, owner
+
 **Winner**:
 The Player whose Snake first reaches the Target Score, or the longest Snake if all Snakes die first.
 _Avoid_: Champion
