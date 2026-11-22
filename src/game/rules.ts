@@ -17,11 +17,39 @@ export type Config = {
   walls: boolean;
   /** true: hitting another snake kills. false: snakes pass through each other. */
   snakeCollisions: boolean;
+  /** How many apples are on the board at once. */
+  apples: number;
 };
 
 /** The parts of the Config that players may change before a match. */
-export type MatchSettings = Pick<Config, 'walls' | 'snakeCollisions'>;
-export const DEFAULT_SETTINGS: MatchSettings = { walls: true, snakeCollisions: true };
+export type MatchSettings = Pick<Config, 'walls' | 'snakeCollisions' | 'apples'>;
+export const DEFAULT_SETTINGS: MatchSettings = { walls: true, snakeCollisions: true, apples: 3 };
+export const MIN_APPLES = 1;
+export const MAX_APPLES = 10;
+
+/** Cleans settings that came from storage or over the network. */
+export function sanitizeSettings(s: Partial<MatchSettings> | undefined): MatchSettings {
+  const apples = Math.round(Number(s?.apples ?? DEFAULT_SETTINGS.apples));
+  return {
+    walls: typeof s?.walls === 'boolean' ? s.walls : DEFAULT_SETTINGS.walls,
+    snakeCollisions: typeof s?.snakeCollisions === 'boolean' ? s.snakeCollisions : DEFAULT_SETTINGS.snakeCollisions,
+    apples: Number.isFinite(apples) ? Math.min(MAX_APPLES, Math.max(MIN_APPLES, apples)) : DEFAULT_SETTINGS.apples,
+  };
+}
+
+/** Cells on the board's short side. The long side follows the screen's shape. */
+export const BOARD_SHORT_SIDE = 18;
+const BOARD_MAX_LONG_SIDE = 34;
+
+/**
+ * Picks a board that fills a play area of the given shape (width / height),
+ * so the lawn uses the whole screen instead of sitting in a small square.
+ */
+export function boardSizeFor(aspect: number): { width: number; height: number } {
+  const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const long = Math.max(BOARD_SHORT_SIDE, Math.min(BOARD_MAX_LONG_SIDE, Math.round(BOARD_SHORT_SIDE * Math.max(a, 1 / a))));
+  return a >= 1 ? { width: long, height: BOARD_SHORT_SIDE } : { width: BOARD_SHORT_SIDE, height: long };
+}
 
 /** Number of snake species a player can choose from. */
 export const SPECIES_COUNT = 8;
@@ -34,6 +62,7 @@ export const DEFAULT_CONFIG: Config = {
   tickMs: 125,
   walls: true,
   snakeCollisions: true,
+  apples: 3,
 };
 
 export const MIN_PLAYERS = 1;
@@ -60,7 +89,7 @@ export type MatchState = {
   config: Config;
   snakes: Snake[];
   fruits: Vec[];
-  /** Number of fruits kept on the board (one per player). */
+  /** Number of apples kept on the board. */
   fruitTarget: number;
   status: 'running' | 'over';
   winners: string[];
@@ -127,7 +156,7 @@ export function createMatch(
     config,
     snakes,
     fruits: [],
-    fruitTarget: players.length,
+    fruitTarget: Math.min(MAX_APPLES, Math.max(MIN_APPLES, Math.round(config.apples))),
     status: 'running',
     winners: [],
     tick: 0,

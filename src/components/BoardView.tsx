@@ -72,7 +72,7 @@ export function BoardView({ state, theme, size, myId }: Props) {
       ))}
 
       {state.snakes.map((s, i) => {
-        const colors = theme.snakes[i % theme.snakes.length];
+        const colors = theme.snakes[s.species % theme.snakes.length];
         return s.body.map((c, idx) => {
           const isHead = idx === 0;
           const inset = isHead ? gap * 0.4 : gap;

@@ -102,6 +102,15 @@ describe('running a match', () => {
     expect(a.last('tick')!.state.snakes.map((s) => s.id)).toEqual([HOST_ID, 'a']);
   });
 
+  it("sends every phone the board shaped for the host's screen", () => {
+    const core = make();
+    const a = join(core, 'a');
+    core.start({ width: 360, height: 640 });
+    const cfg = a.last('tick')!.state.config;
+    expect(cfg.height).toBeGreaterThan(cfg.width);
+    expect(snap.view!.state.config).toEqual(cfg);
+  });
+
   it('blocks new joiners once the match has started', () => {
     const core = make();
     join(core, 'a');
@@ -293,9 +302,9 @@ describe('settings', () => {
   it('sends the host settings to phones and uses them in the match', () => {
     const core = make();
     const a = join(core, 'a');
-    expect(a.last('room')!.settings).toEqual({ walls: true, snakeCollisions: true });
+    expect(a.last('room')!.settings).toEqual({ walls: true, snakeCollisions: true, apples: 3 });
     core.setSettings({ walls: false });
-    expect(a.last('room')!.settings).toEqual({ walls: false, snakeCollisions: true });
+    expect(a.last('room')!.settings).toEqual({ walls: false, snakeCollisions: true, apples: 3 });
     core.setSettings({ snakeCollisions: false });
     core.start();
     expect(snap.view!.state.config.walls).toBe(false);

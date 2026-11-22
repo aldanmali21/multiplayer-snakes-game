@@ -26,7 +26,8 @@ export type Theme = {
   danger: string;
   /** Font family per weight, or null for the system font. */
   fonts: { regular: string; medium: string; bold: string } | null;
-  snakes: [SnakeColors, SnakeColors, SnakeColors, SnakeColors];
+  /** One entry per snake species (8). */
+  snakes: SnakeColors[];
 };
 
 /** Approved look: realistic lawn, four real snake species, hedge background. */
@@ -55,6 +56,10 @@ export const gardenParty: Theme = {
     { head: '#f59a5c', body: '#ec7a35', glow: '#ec7a35' }, // corn snake
     { head: '#6b9cf0', body: '#3d7be0', glow: '#3d7be0' }, // blue racer
     { head: '#ef5a62', body: '#d9333c', glow: '#d9333c' }, // milk snake
+    { head: '#d7b07c', body: '#b58d5c', glow: '#b58d5c' }, // rattlesnake
+    { head: '#f6eed8', body: '#e6d6ad', glow: '#f1e7cf' }, // albino python
+    { head: '#a3a9ae', body: '#61666b', glow: '#61666b' }, // black mamba
+    { head: '#f2d35b', body: '#2f3d2a', glow: '#f2d35b' }, // garter snake
   ],
 };
 
@@ -83,6 +88,10 @@ export const neonNight: Theme = {
     { head: '#FBBF24', body: '#F59E0B', glow: '#FBBF24' },
     { head: '#A78BFA', body: '#8B5CF6', glow: '#A78BFA' },
     { head: '#F472B6', body: '#EC4899', glow: '#F472B6' },
+    { head: '#FB923C', body: '#F97316', glow: '#FB923C' },
+    { head: '#E2E8F0', body: '#CBD5E1', glow: '#E2E8F0' },
+    { head: '#60A5FA', body: '#3B82F6', glow: '#60A5FA' },
+    { head: '#FDE047', body: '#EAB308', glow: '#FDE047' },
   ],
 };
 

@@ -47,3 +47,15 @@ _Avoid_: Server, admin, owner
 **Winner**:
 The Player whose Snake first reaches the Target Score, or the longest Snake if all Snakes die first.
 _Avoid_: Champion
+
+**Species**:
+Which of the 8 snake looks a Player plays as. In a Room each Species can be taken by only one Player.
+_Avoid_: Skin, colour
+
+**Match Settings**:
+The Host's choices for a Match: how many Fruit are on the Board at once (1 to 10), whether walls kill, and whether Snakes crash into each other. When walls are off, a Snake leaving one edge comes back on the opposite edge. A Snake running into its own body always dies.
+_Avoid_: Options, difficulty
+
+**Pause**:
+Any Player can stop a running Match for everyone; resuming runs a 3-second countdown first.
+_Avoid_: Freeze

@@ -1,5 +1,5 @@
 import type { Dir, MatchSettings } from '../game/rules';
-import type { MatchView } from '../game/useLocalMatch';
+import type { MatchView } from '../game/matchView';
 import {
   GAME_PORT,
   LineBuffer,

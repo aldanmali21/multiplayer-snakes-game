@@ -20,7 +20,7 @@ export function ScoreBar({ state, theme, myId, only, vertical }: Props) {
     <View style={vertical ? { gap: 10 } : { flexDirection: 'row', gap: 8 }}>
       {idx.filter((i) => state.snakes[i]).map((i) => {
         const s = state.snakes[i];
-        const color = theme.snakes[i % theme.snakes.length].head;
+        const color = theme.snakes[s.species % theme.snakes.length].head;
         const pct = Math.min(1, s.score / state.config.targetScore);
         return (
           <View

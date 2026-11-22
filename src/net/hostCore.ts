@@ -1,6 +1,7 @@
 import {
   DEFAULT_SETTINGS,
   SPECIES_COUNT,
+  boardSizeFor,
   createMatch,
   eliminate,
   step,
@@ -9,7 +10,7 @@ import {
   type MatchSettings,
   type MatchState,
 } from '../game/rules';
-import { COUNTDOWN_SECONDS, type MatchView } from '../game/useLocalMatch';
+import { COUNTDOWN_SECONDS, type MatchView } from '../game/matchView';
 import {
   MAX_ROOM_PLAYERS,
   REJOIN_GRACE_MS,
@@ -166,10 +167,12 @@ export class HostCore {
     this.publish();
   }
 
-  start() {
+  /** Start the match. `board` is the grid size picked for the host's screen; every phone gets the same board. */
+  start(board?: { width: number; height: number }) {
     if (this.phase !== 'lobby' || this.closed) return;
     const players = this.members.map((m) => ({ id: m.id, name: m.name, species: m.species }));
-    this.match = createMatch(players, this.settings, this.opts.seed);
+    const size = board ? boardSizeFor(board.width / board.height) : {};
+    this.match = createMatch(players, { ...this.settings, ...size }, this.opts.seed);
     this.pausedBy = undefined;
     this.beginCountdown();
   }
