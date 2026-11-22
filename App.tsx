@@ -17,6 +17,7 @@ import { useLocalMatch } from './src/game/useLocalMatch';
 import { DEFAULT_SETTINGS, SPECIES_COUNT, sanitizeSettings, type MatchSettings } from './src/game/rules';
 import { useDiscovery } from './src/net/hooks';
 import { useBoardSize } from './src/board/useBoardSize';
+import { useAfter } from './src/components/useAfter';
 
 const NAME_KEY = 'snakes.nickname';
 const PREFS_KEY = 'snakes.prefs';
@@ -52,7 +53,8 @@ function SoloMatch({ name, prefs, onHome }: { name: string; prefs: Prefs; onHome
   const board = useBoardSize();
   const { view, sendTurn, pause, resume } = useLocalMatch(players, prefs.settings, runId, board);
 
-  if (view && view.state.status === 'over') {
+  const showResults = useAfter(view?.state.status === 'over');
+  if (view && view.state.status === 'over' && showResults) {
     return <ResultsScreen theme={theme} state={view.state} myId="me" onAgain={() => setRunId((n) => n + 1)} onHome={onHome} />;
   }
   return <MatchScreen theme={theme} view={view} myId="me" onTurn={sendTurn} onLeave={onHome} onPause={pause} onResume={resume} />;

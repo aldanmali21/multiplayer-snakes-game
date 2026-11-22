@@ -3,7 +3,7 @@ import { PixelRatio, View } from 'react-native';
 import { Canvas, Picture, Skia, createPicture, type SkPicture } from '@shopify/react-native-skia';
 import type { MatchState, Vec } from '../game/rules';
 import { Ctx2D } from './ctx2d';
-import { drawGardenBoard, makeGrass, makeWood, type BoardTextures } from './garden';
+import { CRASH_SECONDS, drawGardenBoard, makeGrass, makeWood, type BoardTextures, type Crash } from './garden';
 
 /** Largest lawn texture side in px, to keep memory in check on big boards. */
 const MAX_TEXTURE = 2048;
@@ -28,10 +28,22 @@ export function GardenBoard({ state, cell, frame }: Props) {
   }, [lw, lh, cols, rows]);
 
   // Remember the previous tick so snakes can glide between cells.
-  const track = useRef<{ tick: number; prev: Vec[][]; at: number; cur: Vec[][]; gap: number }>({ tick: -1, prev: [], at: 0, cur: [], gap: 0 });
+  type Crashing = Omit<Crash, 'age'> & { at: number };
+  const track = useRef<{ tick: number; prev: Vec[][]; at: number; cur: Vec[][]; gap: number; alive: boolean[]; crashes: Crashing[] }>({
+    tick: -1, prev: [], at: 0, cur: [], gap: 0, alive: [], crashes: [],
+  });
   const t = track.current;
   if (state.tick !== t.tick) {
     const now = Date.now();
+    if (state.tick === t.tick + 1) {
+      // A snake that was alive last tick and isn't now just crashed: replay it.
+      state.snakes.forEach((sn, i) => {
+        if (t.alive[i] && !sn.alive && t.cur[i]?.length) t.crashes.push({ body: t.cur[i], species: sn.species, dir: sn.dir, at: now });
+      });
+    } else {
+      t.crashes = [];
+    }
+    t.alive = state.snakes.map((sn) => sn.alive);
     t.prev = t.tick === state.tick - 1 ? t.cur : state.snakes.map((s) => s.body);
     t.cur = state.snakes.map((s) => s.body);
     // On joined phones ticks arrive with network jitter; track the real gap so motion stays even.
@@ -52,7 +64,8 @@ export function GardenBoard({ state, cell, frame }: Props) {
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
       // 60 fps while snakes move and the phone keeps up; 30 otherwise (countdown, paused, slow phone).
-      const fps = stateRef.current.status === 'running' && cost < 9 ? 60 : 30;
+      const busy = stateRef.current.status === 'running' || track.current.crashes.length > 0;
+      const fps = busy && cost < 9 ? 60 : 30;
       if (now - last < 1000 / fps - 2) return;
       last = now;
       const began = Date.now();
@@ -60,6 +73,9 @@ export function GardenBoard({ state, cell, frame }: Props) {
       const tr = track.current;
       const span = Math.max(s.config.tickMs, Math.min(tr.gap || s.config.tickMs, s.config.tickMs * 1.6));
       const frac = s.status === 'running' ? Math.min(1, (Date.now() - tr.at) / span) : 1;
+      const nowMs = Date.now();
+      tr.crashes = tr.crashes.filter((k) => nowMs - k.at < CRASH_SECONDS * 1000);
+      const crashes = tr.crashes.map(({ at, ...k }) => ({ ...k, age: (nowMs - at) / 1000 }));
       const pic = createPicture((canvas) => {
         if (ctx) ctx.canvas = canvas;
         else ctx = new Ctx2D(Skia, canvas);
@@ -70,6 +86,7 @@ export function GardenBoard({ state, cell, frame }: Props) {
           rows,
           fruits: s.fruits,
           snakes: s.snakes.map((sn, i) => ({ body: sn.body, prev: tr.prev[i], species: sn.species, alive: sn.alive })),
+          crashes,
           frac,
           time: now / 1000,
         });

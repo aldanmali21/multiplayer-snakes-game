@@ -302,11 +302,13 @@ describe('settings', () => {
   it('sends the host settings to phones and uses them in the match', () => {
     const core = make();
     const a = join(core, 'a');
-    expect(a.last('room')!.settings).toEqual({ walls: true, snakeCollisions: true, apples: 3 });
+    expect(a.last('room')!.settings).toEqual({ walls: true, snakeCollisions: true, apples: 3, targetScore: 20 });
     core.setSettings({ walls: false });
-    expect(a.last('room')!.settings).toEqual({ walls: false, snakeCollisions: true, apples: 3 });
-    core.setSettings({ snakeCollisions: false });
+    expect(a.last('room')!.settings).toEqual({ walls: false, snakeCollisions: true, apples: 3, targetScore: 20 });
+    core.setSettings({ snakeCollisions: false, targetScore: 35 });
     core.start();
+    expect(snap.view!.state.config.targetScore).toBe(35);
+    expect(a.last('tick')!.state.config.targetScore).toBe(35);
     expect(snap.view!.state.config.walls).toBe(false);
     expect(snap.view!.state.config.snakeCollisions).toBe(false);
   });

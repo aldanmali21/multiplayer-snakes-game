@@ -10,6 +10,8 @@ const FILL = 0;
 const STROKE = 1;
 const CAP_BUTT = 0;
 const CAP_ROUND = 1;
+const JOIN_MITER = 0;
+const JOIN_ROUND = 1;
 const CLAMP = 0;
 const CLIP_INTERSECT = 1;
 
@@ -169,6 +171,8 @@ export class Ctx2D {
     if (mode === STROKE) {
       p.setStrokeWidth(this.lineWidth);
       p.setStrokeCap((this.lineCap === 'round' ? CAP_ROUND : CAP_BUTT) as never);
+      // Round caps come with round joins, so bends in thick lines stay smooth.
+      p.setStrokeJoin((this.lineCap === 'round' ? JOIN_ROUND : JOIN_MITER) as never);
     }
     return p;
   }
@@ -191,6 +195,19 @@ export class Ctx2D {
     return rec.finishRecordingAsPicture();
   }
   drawPicture(pic: SkPicture) { this.canvas.drawPicture(pic); }
+
+  /** Draw `fn` as one see-through layer (so overlapping parts fade together). */
+  private layerPaint?: SkPaint;
+  layer(alpha: number, fn: () => void) {
+    if (alpha <= 0) return;
+    const p = (this.layerPaint ??= this.S.Paint());
+    p.setAlphaf(Math.min(1, alpha));
+    this.save();
+    this.canvas.saveLayer(p);
+    fn();
+    this.canvas.restore();
+    this.restore();
+  }
 
   private imagePaint?: SkPaint;
   drawImage(img: SkImage, x: number, y: number, w: number, h: number) {
