@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { PanResponder, Text, View, useWindowDimensions } from 'react-native';
+import { PanResponder, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
@@ -9,6 +9,7 @@ import type { Theme } from '../theme/theme';
 import { BoardView } from '../components/BoardView';
 import { ScoreBar } from '../components/ScoreBar';
 import { Button, Screen } from '../components/ui';
+import { useFullscreen } from '../components/fullscreen';
 
 const SWIPE_PX = 16;
 
@@ -21,10 +22,27 @@ type Props = {
   banner?: string;
 };
 
+function IconButton({ theme, label, onPress }: { theme: Theme; label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => ({
+        paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
+        backgroundColor: theme.card, borderWidth: 1, borderColor: theme.cardBorder, opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <Text style={{ color: theme.text, fontWeight: '800', fontSize: 14 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export function MatchScreen({ theme, view, myId, onTurn, onLeave, banner }: Props) {
   useKeepAwake();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const { fullscreen, toggle } = useFullscreen();
+  const landscape = width > height;
   const turnRef = useRef(onTurn);
   turnRef.current = onTurn;
 
@@ -57,28 +75,66 @@ export function MatchScreen({ theme, view, myId, onTurn, onLeave, banner }: Prop
     prevAlive.current = me.alive;
   }, [me?.score, me?.alive]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const boardSize = Math.min(width - 32 - 8, height - insets.top - insets.bottom - 220);
+  const pad = fullscreen ? 8 : 16;
+  const boardSize = landscape
+    ? Math.min(height - insets.top - insets.bottom - pad * 2 - 8, width - insets.left - insets.right - 2 * 170)
+    : Math.min(width - 32 - 8, height - insets.top - insets.bottom - 220);
+
+  const status =
+    me && !me.alive && view?.state.status === 'running' ? (
+      <Text style={{ color: theme.danger, textAlign: 'center', fontWeight: '800', fontSize: 15 }}>You crashed. Watching the rest…</Text>
+    ) : banner ? (
+      <Text style={{ color: theme.textDim, textAlign: 'center', fontSize: 13 }}>{banner}</Text>
+    ) : null;
+
+  const board = (
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+      {view ? <BoardView state={view.state} theme={theme} size={boardSize} myId={myId} /> : null}
+      {view && view.countdown > 0 ? (
+        <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center' }}>
+          <Text style={{ color: theme.text, fontSize: 96, fontWeight: '900', textShadowColor: theme.accent, textShadowRadius: 24 }}>
+            {view.countdown}
+          </Text>
+          <Text style={{ color: theme.textDim, fontSize: 15 }}>Swipe to steer</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  if (landscape) {
+    return (
+      <Screen theme={theme}>
+        <View
+          {...pan.panHandlers}
+          style={{
+            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            paddingTop: insets.top + pad, paddingBottom: insets.bottom + pad,
+            paddingLeft: insets.left + pad, paddingRight: insets.right + pad, gap: 12,
+          }}
+        >
+          <View style={{ width: 150, gap: 10 }}>
+            {view ? <ScoreBar state={view.state} theme={theme} myId={myId} vertical /> : null}
+          </View>
+          {board}
+          <View style={{ width: 150, gap: 10, alignItems: 'stretch' }}>
+            <IconButton theme={theme} label={fullscreen ? 'Exit full screen' : 'Full screen'} onPress={toggle} />
+            <IconButton theme={theme} label="Leave" onPress={onLeave} />
+            {status}
+          </View>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen theme={theme}>
       <View style={{ flex: 1, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12, paddingHorizontal: 16, gap: 14 }} {...pan.panHandlers}>
-        {view ? <ScoreBar state={view.state} theme={theme} myId={myId} /> : null}
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          {view ? <BoardView state={view.state} theme={theme} size={boardSize} myId={myId} /> : null}
-          {view && view.countdown > 0 ? (
-            <View pointerEvents="none" style={{ position: 'absolute', alignItems: 'center' }}>
-              <Text style={{ color: theme.text, fontSize: 96, fontWeight: '900', textShadowColor: theme.accent, textShadowRadius: 24 }}>
-                {view.countdown}
-              </Text>
-              <Text style={{ color: theme.textDim, fontSize: 15 }}>Swipe to steer</Text>
-            </View>
-          ) : null}
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <IconButton theme={theme} label="⛶ Full screen" onPress={toggle} />
         </View>
-        {me && !me.alive && view?.state.status === 'running' ? (
-          <Text style={{ color: theme.danger, textAlign: 'center', fontWeight: '800', fontSize: 16 }}>You crashed. Watching the rest…</Text>
-        ) : banner ? (
-          <Text style={{ color: theme.textDim, textAlign: 'center' }}>{banner}</Text>
-        ) : null}
+        {view ? <ScoreBar state={view.state} theme={theme} myId={myId} /> : null}
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>{board}</View>
+        {status}
         <Button theme={theme} kind="ghost" label="Leave" onPress={onLeave} />
       </View>
     </Screen>

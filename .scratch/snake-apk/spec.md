@@ -6,7 +6,7 @@ An Android game where 1 to 4 Players steer Snakes on a shared Board, eat Fruit t
 
 ## Platform and build
 - React Native + Expo, using a development build (not Expo Go) because sockets and discovery need native modules.
-- Android only, portrait. APK produced with EAS Build.
+- Android only. Portrait by default; a Full screen button switches the Match to landscape with the system bars hidden. APK produced by the GitHub Actions workflow (or EAS Build).
 - No internet, no server, no database, no accounts.
 
 ## Rules

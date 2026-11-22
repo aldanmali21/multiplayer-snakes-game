@@ -3,9 +3,9 @@ import { Text, View } from 'react-native';
 import type { MatchState } from '../game/rules';
 import type { Theme } from '../theme/theme';
 
-export function ScoreBar({ state, theme, myId }: { state: MatchState; theme: Theme; myId?: string }) {
+export function ScoreBar({ state, theme, myId, vertical }: { state: MatchState; theme: Theme; myId?: string; vertical?: boolean }) {
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+    <View style={vertical ? { gap: 8 } : { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
       {state.snakes.map((s, i) => {
         const color = theme.snakes[i % theme.snakes.length].head;
         const pct = Math.min(1, s.score / state.config.targetScore);
