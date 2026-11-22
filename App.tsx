@@ -1,20 +1,69 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { BackHandler } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { defaultTheme } from './src/theme/theme';
+import { HomeScreen } from './src/screens/HomeScreen';
+import { MatchScreen } from './src/screens/MatchScreen';
+import { ResultsScreen } from './src/screens/ResultsScreen';
+import { useLocalMatch } from './src/game/useLocalMatch';
 
-export default function App() {
-  return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
-  );
+const NAME_KEY = 'snakes.nickname';
+const theme = defaultTheme;
+
+type Route = { name: 'home' } | { name: 'solo' };
+
+function SoloMatch({ name, onHome }: { name: string; onHome: () => void }) {
+  const players = useMemo(() => [{ id: 'me', name }], [name]);
+  const [runId, setRunId] = useState(0);
+  const { view, sendTurn } = useLocalMatch(players, runId);
+
+  if (view && view.state.status === 'over') {
+    return <ResultsScreen theme={theme} state={view.state} myId="me" onAgain={() => setRunId((n) => n + 1)} onHome={onHome} />;
+  }
+  return <MatchScreen theme={theme} view={view} myId="me" onTurn={sendTurn} onLeave={onHome} />;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default function App() {
+  const [route, setRoute] = useState<Route>({ name: 'home' });
+  const [name, setName] = useState('');
+
+  useEffect(() => {
+    AsyncStorage.getItem(NAME_KEY).then((v) => v && setName(v)).catch(() => {});
+  }, []);
+
+  const saveName = useCallback((n: string) => {
+    setName(n);
+    AsyncStorage.setItem(NAME_KEY, n).catch(() => {});
+  }, []);
+
+  const home = useCallback(() => setRoute({ name: 'home' }), []);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (route.name === 'home') return false;
+      home();
+      return true;
+    });
+    return () => sub.remove();
+  }, [route, home]);
+
+  return (
+    <SafeAreaProvider>
+      <StatusBar style="light" />
+      {route.name === 'solo' ? (
+        <SoloMatch name={name || 'Player'} onHome={home} />
+      ) : (
+        <HomeScreen
+          theme={theme}
+          name={name}
+          onSaveName={saveName}
+          onSolo={() => setRoute({ name: 'solo' })}
+          onHost={() => {}}
+          onJoin={() => {}}
+        />
+      )}
+    </SafeAreaProvider>
+  );
+}
