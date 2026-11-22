@@ -8,7 +8,7 @@
     "userInterfaceStyle": "dark",
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0B0F1A",
+        "backgroundColor": "#1f3d17",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -23,9 +23,10 @@
         "WAKE_LOCK"
       ]
     },
-    "backgroundColor": "#0B0F1A",
+    "backgroundColor": "#10230c",
     "platforms": [
       "android"
-    ]
+    ],
+    "plugins": []
   }
 }

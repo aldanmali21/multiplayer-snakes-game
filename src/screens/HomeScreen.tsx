@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Theme } from '../theme/theme';
-import { Button, Card, Screen } from '../components/ui';
+import { Button, Card, Screen, Text } from '../components/ui';
 
 type Props = {
   theme: Theme;

@@ -1,9 +1,9 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { HOST_ID } from '../net/hostCore';
 import { useClient, useHost } from '../net/hooks';
 import type { Theme } from '../theme/theme';
-import { Button, Screen } from '../components/ui';
+import { Button, Screen, Text } from '../components/ui';
 import { MatchScreen } from './MatchScreen';
 import { ResultsScreen } from './ResultsScreen';
 import { RoomScreen } from './RoomScreen';
@@ -32,7 +32,7 @@ export function HostFlow({ theme, name, onExit }: { theme: Theme; name: string; 
   if (snap.phase === 'over' && snap.view) {
     return <ResultsScreen theme={theme} state={snap.view.state} myId={HOST_ID} againLabel="Back to room" onAgain={() => core.playAgain()} onHome={onExit} />;
   }
-  return <MatchScreen theme={theme} view={snap.view} myId={HOST_ID} onTurn={(d) => core.turn(HOST_ID, d)} onLeave={onExit} banner="Leaving ends the match for everyone" />;
+  return <MatchScreen theme={theme} view={snap.view} myId={HOST_ID} onTurn={(d) => core.turn(HOST_ID, d)} onLeave={onExit} banner="Leaving ends the match for everyone" roomCode={snap.code} />;
 }
 
 export function ClientFlow({ theme, name, address, code, onExit }: { theme: Theme; name: string; address: string; code: string; onExit: () => void }) {
@@ -56,5 +56,5 @@ export function ClientFlow({ theme, name, address, code, onExit }: { theme: Them
   if (phase === 'over') {
     return <ResultsScreen theme={theme} state={snap.view.state} myId={myId} onHome={onExit} note="Waiting for the host to start another match…" />;
   }
-  return <MatchScreen theme={theme} view={snap.view} myId={myId} onTurn={(d) => client.current?.turn(d)} onLeave={onExit} banner={banner} />;
+  return <MatchScreen theme={theme} view={snap.view} myId={myId} onTurn={(d) => client.current?.turn(d)} onLeave={onExit} banner={banner} roomCode={snap.room?.code} />;
 }
