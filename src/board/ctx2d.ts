@@ -3,7 +3,7 @@
  * designed as HTML canvas code; this lets the drawing code stay close to it.
  * Only `import type` from Skia here, so the same code also runs in Node with CanvasKit.
  */
-import type { SkCanvas, SkColor, SkImage, SkPaint, SkPathBuilder, SkShader, Skia as SkiaApi } from '@shopify/react-native-skia';
+import type { SkCanvas, SkColor, SkImage, SkPaint, SkPath, SkPathBuilder, SkPicture, SkShader, Skia as SkiaApi } from '@shopify/react-native-skia';
 
 // Numeric values of Skia enums (kept local so this file has no runtime Skia import).
 const FILL = 0;
@@ -36,6 +36,9 @@ export function cssColor(c: string): string {
   return `rgba(${to(f(h + 1 / 3))},${to(f(h))},${to(f(h - 1 / 3))},${a})`;
 }
 
+const shaderCache = new Map<string, SkShader>();
+const colorCache = new Map<string, SkColor>();
+
 export class Gradient {
   private stops: [number, string][] = [];
   constructor(
@@ -45,7 +48,17 @@ export class Gradient {
   addColorStop(pos: number, color: string) {
     this.stops.push([pos, color]);
   }
+  /** Same gradient, same shader: heads and eyes are drawn in local coordinates, so these repeat every frame. */
   shader(S: typeof SkiaApi): SkShader {
+    const key = this.kind + this.a.join(',') + '|' + this.stops.map(([p, c]) => p + c).join(',');
+    let sh = shaderCache.get(key);
+    if (sh) return sh;
+    sh = this.make(S);
+    if (shaderCache.size > 200) shaderCache.clear();
+    shaderCache.set(key, sh);
+    return sh;
+  }
+  private make(S: typeof SkiaApi): SkShader {
     const colors = this.stops.map(([, c]) => S.Color(cssColor(c)) as SkColor);
     const pos = this.stops.map(([p]) => p);
     if (this.kind === 'linear') {
@@ -66,11 +79,9 @@ export class Ctx2D {
   private path: SkPathBuilder;
   private stack: { fillStyle: Style; strokeStyle: Style; lineWidth: number; lineCap: 'butt' | 'round'; globalAlpha: number }[] = [];
   private paint: SkPaint;
-  private colorCache = new Map<string, SkColor>();
-
   constructor(
     private S: typeof SkiaApi,
-    readonly canvas: SkCanvas,
+    public canvas: SkCanvas,
   ) {
     this.path = S.PathBuilder.Make();
     this.paint = S.Paint();
@@ -99,12 +110,16 @@ export class Ctx2D {
   }
 
   // ---- paths ----
-  beginPath() { this.path = this.S.PathBuilder.Make(); }
+  beginPath() { this.path.reset(); }
   moveTo(x: number, y: number) { this.path.moveTo(x, y); }
   lineTo(x: number, y: number) { this.path.lineTo(x, y); }
   quadraticCurveTo(cx: number, cy: number, x: number, y: number) { this.path.quadTo(cx, cy, x, y); }
   bezierCurveTo(a: number, b: number, c: number, d: number, x: number, y: number) { this.path.cubicTo(a, b, c, d, x, y); }
   closePath() { this.path.close(); }
+  /** A full circle as its own contour (no moveTo needed). */
+  circle(x: number, y: number, r: number) {
+    if (r > 0) this.path.addCircle(x, y, r);
+  }
   arc(x: number, y: number, r: number, start: number, end: number) {
     if (r <= 0) return;
     if (end - start >= Math.PI * 2 - 1e-3) {
@@ -115,9 +130,8 @@ export class Ctx2D {
     this.path.arcToOval(rect, (start * 180) / Math.PI, ((end - start) * 180) / Math.PI, false);
   }
   /** Full ellipses only (that's all the designs use), drawn as a smooth polygon. */
-  ellipse(cx: number, cy: number, rx: number, ry: number, rot: number) {
+  ellipse(cx: number, cy: number, rx: number, ry: number, rot: number, n = 28) {
     if (rx <= 0 || ry <= 0) return;
-    const n = 28;
     const cr = Math.cos(rot);
     const sr = Math.sin(rot);
     for (let i = 0; i <= n; i++) {
@@ -134,10 +148,10 @@ export class Ctx2D {
 
   // ---- drawing ----
   private color(c: string): SkColor {
-    let v = this.colorCache.get(c);
+    let v = colorCache.get(c);
     if (!v) {
       v = this.S.Color(cssColor(c));
-      this.colorCache.set(c, v);
+      colorCache.set(c, v);
     }
     return v;
   }
@@ -159,13 +173,28 @@ export class Ctx2D {
     return p;
   }
   fill() { this.canvas.drawPath(this.path.build(), this.setup(this.fillStyle, FILL)); }
+  /** Finish the current path so it can be drawn several times. */
+  takePath(): SkPath { return this.path.build(); }
+  fillPath(path: SkPath) { this.canvas.drawPath(path, this.setup(this.fillStyle, FILL)); }
+  strokePath(path: SkPath) { this.canvas.drawPath(path, this.setup(this.strokeStyle, STROKE)); }
+  clipTo(path: SkPath) { this.canvas.clipPath(path, CLIP_INTERSECT as never, true); }
   stroke() { this.canvas.drawPath(this.path.build(), this.setup(this.strokeStyle, STROKE)); }
   clip() { this.canvas.clipPath(this.path.build(), CLIP_INTERSECT as never, true); }
   fillRect(x: number, y: number, w: number, h: number) {
     this.canvas.drawRect(this.S.XYWHRect(x, y, w, h), this.setup(this.fillStyle, FILL));
   }
+  /** Record drawing once into a picture that can be stamped many times. */
+  record(w: number, h: number, draw: (ctx: Ctx2D) => void): SkPicture {
+    const rec = this.S.PictureRecorder();
+    const sub = new Ctx2D(this.S, rec.beginRecording(this.S.XYWHRect(0, 0, w, h)));
+    draw(sub);
+    return rec.finishRecordingAsPicture();
+  }
+  drawPicture(pic: SkPicture) { this.canvas.drawPicture(pic); }
+
+  private imagePaint?: SkPaint;
   drawImage(img: SkImage, x: number, y: number, w: number, h: number) {
-    const p = this.S.Paint();
+    const p = (this.imagePaint ??= this.S.Paint());
     p.setAlphaf(this.globalAlpha);
     this.canvas.drawImageRect(img, this.S.XYWHRect(0, 0, img.width(), img.height()), this.S.XYWHRect(x, y, w, h), p);
   }
