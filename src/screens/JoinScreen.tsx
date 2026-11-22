@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FoundRoom } from '../net/client';
 import { isIpv4 } from '../net/lan';
 import { normaliseCode } from '../net/protocol';
 import type { Theme } from '../theme/theme';
-import { Button, Card, Screen } from '../components/ui';
+import { Button, Card, Screen, Text } from '../components/ui';
 
 type Props = {
   theme: Theme;

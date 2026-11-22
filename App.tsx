@@ -3,6 +3,7 @@ import { BackHandler } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts, Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold } from '@expo-google-fonts/fredoka';
 import { defaultTheme } from './src/theme/theme';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { MatchScreen } from './src/screens/MatchScreen';
@@ -41,6 +42,7 @@ function SoloMatch({ name, onHome }: { name: string; onHome: () => void }) {
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [name, setName] = useState('');
+  const [fontsLoaded, fontError] = useFonts({ Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold });
 
   useEffect(() => {
     AsyncStorage.getItem(NAME_KEY).then((v) => v && setName(v)).catch(() => {});
@@ -61,6 +63,8 @@ export default function App() {
     });
     return () => sub.remove();
   }, [route, home]);
+
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>

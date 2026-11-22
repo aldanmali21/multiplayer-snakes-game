@@ -1,9 +1,9 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MatchState } from '../game/rules';
 import type { Theme } from '../theme/theme';
-import { Button, Card, Screen } from '../components/ui';
+import { Button, Card, Screen, Text } from '../components/ui';
 
 type Props = {
   theme: Theme;
